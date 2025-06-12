@@ -136,6 +136,7 @@ app.post('/login', async (req, res) => {
 app.post('/admin/assign', async (req, res) => {
   try {
     const { username, password, role, assignedTo, accountName } = req.body;
+    
     if (!username || !password || !role || !accountName) {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
@@ -143,9 +144,12 @@ app.post('/admin/assign', async (req, res) => {
     const existingUser = await User.findOne({ username });
     if (existingUser) return res.status(409).json({ success: false, message: 'Username already exists' });
 
+    // Hash the password before saving
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     const newUser = new User({
       username,
-      password,
+      password: hashedPassword,  // Save the hashed password
       role,
       assignedTo: assignedTo || null,
       accountName,
@@ -157,6 +161,7 @@ app.post('/admin/assign', async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error while creating user', error: err.message });
   }
 });
+
 
 app.get('/admin/users', async (req, res) => {
   try {
@@ -189,11 +194,15 @@ app.get('/admin/managers', async (req, res) => {
 app.put('/admin/change-password', async (req, res) => {
   try {
     const { username, newPassword } = req.body;
+
     const user = await User.findOne({ username });
 
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    user.password = newPassword;
+    // Hash the new password before saving
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    
+    user.password = hashedPassword;  // Update the password with the hashed value
     await user.save();
 
     res.json({ success: true, message: 'Password updated successfully' });
@@ -201,6 +210,7 @@ app.put('/admin/change-password', async (req, res) => {
     res.status(500).json({ message: 'Error updating password', error: err.message });
   }
 });
+
 
 // VEHICLE ROUTES
 app.get('/vehicles', async (req, res) => {
