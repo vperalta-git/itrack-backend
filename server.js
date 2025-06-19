@@ -1,10 +1,11 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const bcrypt = require('bcryptjs'); // required by existing password logic
+const twilio = require('twilio');   // NEW: For SMS sending
 
 const app = express();
 
-// Enable CORS for all origins (adjust if needed)
 app.use(cors());
 app.use(express.json());
 
@@ -13,15 +14,14 @@ const serviceRequestRoutes = require('./routes/servicerequestRoutes');
 const inventoryRoutes = require('./routes/inventoryRoutes');
 const driverAllocationRoutes = require('./routes/driverallocationRoutes');
 
-// MongoDB connection string
+// MongoDB connection
 const mongoURI = 'mongodb+srv://itrack_user:itrack123@cluster0.py8s8pl.mongodb.net/itrackDB?retryWrites=true&w=majority&appName=Cluster0';
 
-// Connect to MongoDB Atlas
 mongoose.connect(mongoURI)
   .then(() => console.log('✅ Connected to MongoDB Atlas'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
-// Schemas
+// SCHEMAS
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
@@ -74,14 +74,13 @@ const DriverAllocationSchema = new mongoose.Schema({
   status: String,
 }, { timestamps: true });
 
-// Compile models ONLY if they don’t already exist
 const User = mongoose.models.User || mongoose.model('User', UserSchema);
 const Vehicle = mongoose.models.Vehicle || mongoose.model('Vehicle', VehicleSchema);
 const VehicleStock = mongoose.models.VehicleStock || mongoose.model('VehicleStock', VehicleStockSchema);
 const VehiclePreparation = mongoose.models.VehiclePreparation || mongoose.model('VehiclePreparation', VehiclePreparationSchema);
 const DriverAllocation = mongoose.models.DriverAllocation || mongoose.model('DriverAllocation', DriverAllocationSchema);
 
-// Helper to capitalize words
+// Capitalize helper
 function capitalizeWords(string) {
   if (!string) return '';
   return string
@@ -92,7 +91,7 @@ function capitalizeWords(string) {
 
 // === ROUTES ===
 
-// AUTH route
+// LOGIN
 app.post('/login', async (req, res) => {
   try {
     let { username, password, role } = req.body;
@@ -115,9 +114,8 @@ app.post('/login', async (req, res) => {
       }
     }
 
-    if (password !== user.password) {
-      return res.status(401).json({ success: false, message: 'Invalid password' });
-    }
+    const match = await bcrypt.compare(password, user.password);
+    if (!match) return res.status(401).json({ success: false, message: 'Invalid password' });
 
     const formattedRole = capitalizeWords(user.role);
 
@@ -132,11 +130,11 @@ app.post('/login', async (req, res) => {
   }
 });
 
-// ADMIN USER MANAGEMENT
+// ADMIN
 app.post('/admin/assign', async (req, res) => {
   try {
     const { username, password, role, assignedTo, accountName } = req.body;
-    
+
     if (!username || !password || !role || !accountName) {
       return res.status(400).json({ success: false, message: 'Missing required fields' });
     }
@@ -144,12 +142,11 @@ app.post('/admin/assign', async (req, res) => {
     const existingUser = await User.findOne({ username });
     if (existingUser) return res.status(409).json({ success: false, message: 'Username already exists' });
 
-    // Hash the password before saving
     const hashedPassword = await bcrypt.hash(password, 10);
 
     const newUser = new User({
       username,
-      password: hashedPassword,  // Save the hashed password
+      password: hashedPassword,
       role,
       assignedTo: assignedTo || null,
       accountName,
@@ -161,7 +158,6 @@ app.post('/admin/assign', async (req, res) => {
     res.status(500).json({ success: false, message: 'Server error while creating user', error: err.message });
   }
 });
-
 
 app.get('/admin/users', async (req, res) => {
   try {
@@ -194,15 +190,12 @@ app.get('/admin/managers', async (req, res) => {
 app.put('/admin/change-password', async (req, res) => {
   try {
     const { username, newPassword } = req.body;
-
     const user = await User.findOne({ username });
 
     if (!user) return res.status(404).json({ message: 'User not found' });
 
-    // Hash the new password before saving
     const hashedPassword = await bcrypt.hash(newPassword, 10);
-    
-    user.password = hashedPassword;  // Update the password with the hashed value
+    user.password = hashedPassword;
     await user.save();
 
     res.json({ success: true, message: 'Password updated successfully' });
@@ -211,8 +204,7 @@ app.put('/admin/change-password', async (req, res) => {
   }
 });
 
-
-// VEHICLE ROUTES
+// VEHICLES
 app.get('/vehicles', async (req, res) => {
   try {
     const vehicles = await Vehicle.find();
@@ -269,7 +261,6 @@ app.put('/vehicles/:vin/update-requested', async (req, res) => {
       { requested_processes },
       { new: true }
     );
-
     if (!vehicle) return res.status(404).json({ message: 'Vehicle not found' });
     res.json({ success: true, vehicle });
   } catch (err) {
@@ -287,7 +278,7 @@ app.delete('/vehicles/:vin/delete', async (req, res) => {
   }
 });
 
-// VEHICLE STOCKS ROUTES
+// VEHICLE STOCK
 app.get('/vehicle-stocks', async (req, res) => {
   try {
     const stocks = await VehicleStock.find();
@@ -307,7 +298,7 @@ app.post('/vehicle-stocks', async (req, res) => {
   }
 });
 
-// VEHICLE PREPARATIONS ROUTES
+// VEHICLE PREPARATION
 app.get('/vehicle-preparations', async (req, res) => {
   try {
     const preparations = await VehiclePreparation.find();
@@ -327,7 +318,7 @@ app.post('/vehicle-preparations', async (req, res) => {
   }
 });
 
-// DRIVER ALLOCATIONS ROUTES
+// DRIVER ALLOCATION
 app.get('/driver-allocations', async (req, res) => {
   try {
     const allocations = await DriverAllocation.find();
@@ -347,17 +338,39 @@ app.post('/driver-allocations', async (req, res) => {
   }
 });
 
-// SERVICE REQUEST ROUTES
+// ROUTES FROM FILES
 app.use('/', serviceRequestRoutes);
 app.use('/', inventoryRoutes);
 app.use('/', driverAllocationRoutes);
 
-// TEST ROUTE
+// NEW: SEND SMS ROUTE
+const accountSid = process.env.TWILIO_ACCOUNT_SID;
+const authToken = process.env.TWILIO_AUTH_TOKEN;
+const twilioFrom = '+14844972350';
+const client = twilio(accountSid, authToken);
+
+app.post('/send-sms', async (req, res) => {
+  const { to, message } = req.body;
+  if (!to || !message) return res.status(400).json({ success: false, error: 'Missing fields' });
+
+  try {
+    const result = await client.messages.create({
+      to,
+      body: message,
+      from: twilioFrom
+    });
+    res.json({ success: true, sid: result.sid });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// TEST
 app.get('/test', (req, res) => {
   res.send('Server test successful!');
 });
 
-// START SERVER
+// LISTEN
 const PORT = 5000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
