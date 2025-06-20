@@ -94,30 +94,20 @@ function capitalizeWords(string) {
 // LOGIN
 app.post('/login', async (req, res) => {
   try {
-    let { username, password, role } = req.body;
-    console.log('📥 Login Attempt:', { username, role });
+    let { username, password } = req.body;
+    console.log('📥 Login Attempt:', { username });
 
     const user = await User.findOne({ username });
     if (!user) return res.status(401).json({ success: false, message: 'Invalid username' });
 
-    const allowedRoles = ['admin', 'manager', 'supervisor', 'sales agent', 'driver', 'dispatch'];
-
-    if (role) {
-      const roleLower = role.toLowerCase();
-
-      if (!allowedRoles.includes(roleLower)) {
-        return res.status(400).json({ success: false, message: 'Unknown role received' });
-      }
-
-      if (user.role.toLowerCase() !== roleLower) {
-        return res.status(403).json({ success: false, message: 'Role mismatch' });
-      }
-    }
-
+    // Remove role check here, only check password
     const match = await bcrypt.compare(password, user.password);
     if (!match) return res.status(401).json({ success: false, message: 'Invalid password' });
 
-    const formattedRole = capitalizeWords(user.role);
+    // Capitalize role for frontend compatibility
+    const formattedRole = user.role
+      ? user.role.charAt(0).toUpperCase() + user.role.slice(1)
+      : '';
 
     res.json({
       success: true,
@@ -365,6 +355,16 @@ app.post('/send-sms', async (req, res) => {
   }
 });
 
+// TEST
+app.get('/test', (req, res) => {
+  res.send('Server test successful!');
+});
+
+// LISTEN
+const PORT = 5000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Server running on http://localhost:${PORT}`);
+});
 // TEST
 app.get('/test', (req, res) => {
   res.send('Server test successful!');
