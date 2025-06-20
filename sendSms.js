@@ -1,25 +1,48 @@
-// backend/sendSms.js
-const twilio = require('twilio');
+const axios = require('axios');
+require('dotenv').config();
 
-const accountSid = process.env.TWILIO_ACCOUNT_SID; // replace with your Twilio SID
-const authToken = process.env.TWILIO_AUTH_TOKEN;   // replace with your Twilio Auth Token
-const from = '+14844972350'; // replace with your Twilio phone number
+const sendSMS = async (recipient, message) => {
+  // Fallback behavior if API keys are missing or not verified yet
+  if (
+    !process.env.ITEXMO_APICODE ||
+    !process.env.ITEXMO_EMAIL ||
+    !process.env.ITEXMO_PASSWORD
+  ) {
+    console.warn('⚠️ iTexMo credentials not set or Sender ID not ready');
+    return {
+      success: true,
+      info: `Simulated SMS to ${recipient}: "${message}"`,
+    };
+  }
 
-const client = twilio(accountSid, authToken);
+  const payload = {
+    ApiCode: process.env.ITEXMO_APICODE,
+    Email: process.env.ITEXMO_EMAIL,
+    Password: process.env.ITEXMO_PASSWORD,
+    Recipients: [recipient],
+    Message: message,
+    SenderId: 'ITM.TEST3', // Trial Sender ID
+  };
 
-const sendSMS = async (to, body) => {
   try {
-    const message = await client.messages.create({
-      to,
-      body,
-      from,
+    const response = await axios.post('https://api.itexmo.com/api/broadcast', payload, {
+      headers: {
+        'Content-Type': 'application/json',
+      },
     });
 
-    console.log('Message sent:', message.sid);
-    return { success: true, sid: message.sid };
-  } catch (error) {
-    console.error('SMS error:', error.message);
-    return { success: false, error: error.message };
+    if (!response.data.Error) {
+      return { success: true, referenceId: response.data.ReferenceId };
+    } else {
+      console.error('❌ iTexMo Error:', response.data);
+      return { success: false, error: response.data };
+    }
+  } catch (err) {
+    console.error('❌ Request Error:', err.message);
+    return {
+      success: false,
+      error: err.response?.data || err.message || 'SMS failed',
+    };
   }
 };
 
