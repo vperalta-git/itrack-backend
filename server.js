@@ -336,28 +336,31 @@ app.post('/driver-allocations', async (req, res) => {
 // === VEHICLE STOCKS ===
 app.get('/vehicle-stocks', async (req, res) => {
   try {
-    // Mock data for vehicle stocks since we don't have real data
-    const mockStocks = [
-      {
-        _id: '1',
-        unitName: 'FJ 3577',
-        conductionNumber: 'CD001',
-        bodyColor: 'White',
-        variation: 'Standard',
-        status: 'Available',
-        createdAt: new Date().toISOString()
-      },
-      {
-        _id: '2',
-        unitName: 'FJ 3578',
-        conductionNumber: 'CD002',
-        bodyColor: 'Red',
-        variation: 'Deluxe',
-        status: 'In Use',
-        createdAt: new Date().toISOString()
-      }
-    ];
-    res.json({ success: true, data: mockStocks });
+    console.log('[VEHICLE-STOCKS] Fetching vehicle stocks from database...');
+    
+    // Fetch real data from MongoDB vehiclestocks collection
+    const vehicleStocks = await VehicleStock.find({}).sort({ createdAt: -1 });
+    
+    console.log(`[VEHICLE-STOCKS] Found ${vehicleStocks.length} vehicle stocks`);
+    
+    // Transform data to include additional fields that the frontend expects
+    const transformedStocks = vehicleStocks.map(stock => ({
+      _id: stock._id,
+      unitName: stock.unitName,
+      conductionNumber: stock.conductionNumber || stock.unitId || 'N/A',
+      unitId: stock.unitId || stock.unitName,
+      bodyColor: stock.bodyColor,
+      variation: stock.variation,
+      status: stock.status || 'Available',
+      createdAt: stock.createdAt,
+      updatedAt: stock.updatedAt
+    }));
+
+    res.json({ 
+      success: true, 
+      data: transformedStocks,
+      count: transformedStocks.length
+    });
   } catch (err) {
     console.error('[VEHICLE-STOCKS] Error fetching vehicle stocks:', err);
     res.status(500).json({ success: false, error: err.message });
@@ -369,15 +372,40 @@ app.post('/vehicle-stocks', async (req, res) => {
     const stockData = req.body;
     console.log('[VEHICLE-STOCKS] Adding new stock:', stockData);
     
-    // Mock response for adding stock
-    const newStock = {
-      _id: Date.now().toString(),
-      ...stockData,
-      status: 'Available',
-      createdAt: new Date().toISOString()
-    };
+    // Validate required fields
+    if (!stockData.unitName || !stockData.bodyColor || !stockData.variation) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: unitName, bodyColor, and variation are required'
+      });
+    }
     
-    res.json({ success: true, data: newStock });
+    // Create new vehicle stock in database
+    const newStock = new VehicleStock({
+      unitName: stockData.unitName,
+      conductionNumber: stockData.conductionNumber,
+      unitId: stockData.unitId || stockData.unitName,
+      bodyColor: stockData.bodyColor,
+      variation: stockData.variation
+    });
+    
+    const savedStock = await newStock.save();
+    console.log('[VEHICLE-STOCKS] Successfully saved stock:', savedStock._id);
+    
+    res.json({ 
+      success: true, 
+      data: {
+        _id: savedStock._id,
+        unitName: savedStock.unitName,
+        conductionNumber: savedStock.conductionNumber,
+        unitId: savedStock.unitId,
+        bodyColor: savedStock.bodyColor,
+        variation: savedStock.variation,
+        status: 'Available',
+        createdAt: savedStock.createdAt,
+        updatedAt: savedStock.updatedAt
+      }
+    });
   } catch (err) {
     console.error('[VEHICLE-STOCKS] Error adding stock:', err);
     res.status(500).json({ success: false, error: err.message });
