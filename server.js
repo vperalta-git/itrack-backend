@@ -333,6 +333,88 @@ app.post('/driver-allocations', async (req, res) => {
   }
 });
 
+// === VEHICLE STOCKS ===
+app.get('/vehicle-stocks', async (req, res) => {
+  try {
+    // Mock data for vehicle stocks since we don't have real data
+    const mockStocks = [
+      {
+        _id: '1',
+        unitName: 'FJ 3577',
+        conductionNumber: 'CD001',
+        bodyColor: 'White',
+        variation: 'Standard',
+        status: 'Available',
+        createdAt: new Date().toISOString()
+      },
+      {
+        _id: '2',
+        unitName: 'FJ 3578',
+        conductionNumber: 'CD002',
+        bodyColor: 'Red',
+        variation: 'Deluxe',
+        status: 'In Use',
+        createdAt: new Date().toISOString()
+      }
+    ];
+    res.json({ success: true, data: mockStocks });
+  } catch (err) {
+    console.error('[VEHICLE-STOCKS] Error fetching vehicle stocks:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/vehicle-stocks', async (req, res) => {
+  try {
+    const stockData = req.body;
+    console.log('[VEHICLE-STOCKS] Adding new stock:', stockData);
+    
+    // Mock response for adding stock
+    const newStock = {
+      _id: Date.now().toString(),
+      ...stockData,
+      status: 'Available',
+      createdAt: new Date().toISOString()
+    };
+    
+    res.json({ success: true, data: newStock });
+  } catch (err) {
+    console.error('[VEHICLE-STOCKS] Error adding stock:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// === VEHICLE PREPARATIONS ===
+app.get('/vehicle-preparations', async (req, res) => {
+  try {
+    // Mock data for vehicle preparations
+    const mockPreps = [
+      {
+        _id: '1',
+        unitId: 'FJ 3577',
+        prepType: 'Basic Inspection',
+        status: 'In Progress',
+        assignedTechnician: 'Tech 1',
+        startDate: new Date().toISOString(),
+        estimatedCompletion: new Date(Date.now() + 24*60*60*1000).toISOString()
+      },
+      {
+        _id: '2',
+        unitId: 'FJ 3578',
+        prepType: 'Full Service',
+        status: 'Completed',
+        assignedTechnician: 'Tech 2',
+        startDate: new Date(Date.now() - 48*60*60*1000).toISOString(),
+        completedDate: new Date().toISOString()
+      }
+    ];
+    res.json({ success: true, data: mockPreps });
+  } catch (err) {
+    console.error('[VEHICLE-PREP] Error fetching vehicle preparations:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // === DASHBOARD STATS ===
 app.get('/dashboard/stats', async (req, res) => {
   try {
@@ -386,6 +468,9 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('  - GET  /vehicles/:id');
   console.log('  - PATCH /vehicles/:id');
   console.log('  - POST /vehicles');
+  console.log('  - GET  /vehicle-stocks');
+  console.log('  - POST /vehicle-stocks');
+  console.log('  - GET  /vehicle-preparations');
   console.log('  - GET  /driver-allocations');
   console.log('  - POST /driver-allocations');
   console.log('  - GET  /dashboard/stats');
