@@ -247,6 +247,70 @@ app.post('/vehicles', async (req, res) => {
   }
 });
 
+// === GET VEHICLE BY UNIT ID ===
+app.get('/vehicles/unit/:unitId', async (req, res) => {
+  try {
+    // Decode the unitId to handle spaces and special characters
+    const unitId = decodeURIComponent(req.params.unitId);
+    console.log(`[VEHICLES] Searching for vehicle with unitId: ${unitId}`);
+    
+    // Mock vehicle data for now since we don't have real vehicle data
+    const mockVehicle = {
+      unitId: unitId,
+      location: {
+        lat: 14.5995 + (Math.random() - 0.5) * 0.01, // Manila area with slight variation
+        lng: 120.9842 + (Math.random() - 0.5) * 0.01
+      },
+      status: 'active',
+      lastUpdate: new Date().toISOString()
+    };
+    
+    console.log(`[VEHICLES] Returning mock vehicle data for ${unitId}`);
+    res.json(mockVehicle);
+  } catch (err) {
+    console.error(`[VEHICLES] Error fetching vehicle ${req.params.unitId}:`, err);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// === GET VEHICLE BY ID ===
+app.get('/vehicles/:id', async (req, res) => {
+  try {
+    const id = decodeURIComponent(req.params.id);
+    console.log(`[VEHICLES] Getting vehicle ${id}`);
+    
+    // Mock response for vehicle get
+    res.json({ 
+      success: true, 
+      message: 'Vehicle found',
+      vehicleId: id 
+    });
+  } catch (err) {
+    console.error(`[VEHICLES] Error getting vehicle ${req.params.id}:`, err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// === PATCH VEHICLE LOCATION ===
+app.patch('/vehicles/:id', async (req, res) => {
+  try {
+    const id = decodeURIComponent(req.params.id);
+    const { location } = req.body;
+    console.log(`[VEHICLES] Updating vehicle ${id} location:`, location);
+    
+    // Mock response for vehicle location update
+    res.json({ 
+      success: true, 
+      message: 'Vehicle location updated',
+      vehicleId: id,
+      location: location
+    });
+  } catch (err) {
+    console.error(`[VEHICLES] Error updating vehicle ${req.params.id}:`, err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // === DRIVER ALLOCATIONS ===
 app.get('/driver-allocations', async (req, res) => {
   try {
@@ -318,6 +382,9 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('  - GET  /admin/users');
   console.log('  - GET  /admin/managers');
   console.log('  - GET  /vehicles');
+  console.log('  - GET  /vehicles/unit/:unitId');
+  console.log('  - GET  /vehicles/:id');
+  console.log('  - PATCH /vehicles/:id');
   console.log('  - POST /vehicles');
   console.log('  - GET  /driver-allocations');
   console.log('  - POST /driver-allocations');
