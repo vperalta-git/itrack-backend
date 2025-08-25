@@ -9,9 +9,13 @@ console.log('🚀 Starting I-Track Backend Server...');
 
 const app = express();
 
-// Enable CORS for all origins (adjust if needed)
-app.use(cors());
+// Enable CORS for all origins - Mobile app compatibility
+app.use(cors({
+  origin: true, // Allow all origins for development
+  credentials: true
+}));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // MongoDB connection string
 const mongoURI =
@@ -110,7 +114,184 @@ const VehicleStock = mongoose.model('VehicleStock', VehicleStockSchema);
 const VehiclePreparation = mongoose.model('VehiclePreparation', VehiclePreparationSchema);
 const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema);
 
-// ================== ROUTES ==================
+// ================== WEB APP COMPATIBLE ROUTES (/api prefix) ==================
+
+// === AUTH ROUTES (Web App Compatible) ===
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body;
+    console.log('📥 Web Login Attempt:', { email, password: '***' });
+
+    if (!email || !password) {
+      return res.status(400).json({ success: false, message: 'Email and password are required' });
+    }
+
+    // Try to find user by email (web app) or username (mobile app)
+    let user = await User.findOne({ 
+      $or: [
+        { email: email },
+        { username: email } // Allow login with username as email
+      ]
+    });
+
+    if (!user || user.password !== password) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    console.log('✅ Login successful for:', user.accountName || user.username);
+    res.json({ 
+      success: true,
+      user: {
+        id: user._id,
+        name: user.accountName,
+        email: user.email || user.username,
+        role: user.role
+      }
+    });
+  } catch (err) {
+    console.error('❌ Web Login error:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+app.post('/api/logout', (req, res) => {
+  console.log('✅ Logout successful');
+  res.json({ success: true });
+});
+
+app.get('/api/checkAuth', (req, res) => {
+  // For mobile app, we'll handle auth differently (using tokens in production)
+  res.json({ authenticated: false });
+});
+
+// === USER ROUTES (Web App Compatible) ===
+app.get('/api/getUsers', async (req, res) => {
+  try {
+    const users = await User.find({}, '-password');
+    res.json(users); // Web app expects direct array
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Error fetching users', error: err.message });
+  }
+});
+
+app.post('/api/createUser', async (req, res) => {
+  try {
+    const { name, email, role, username, password, accountName } = req.body;
+    
+    // Handle both web app (name, email) and mobile app (username, password, accountName) formats
+    const newUser = new User({
+      username: username || email,
+      email: email || username,
+      name: name || accountName,
+      accountName: accountName || name,
+      password,
+      role
+    });
+
+    await newUser.save();
+    res.json({ success: true, message: 'User created successfully' });
+  } catch (err) {
+    if (err.code === 11000) {
+      return res.status(400).json({ success: false, message: 'User already exists' });
+    }
+    res.status(500).json({ success: false, message: 'Error creating user', error: err.message });
+  }
+});
+
+app.delete('/api/deleteUser/:id', async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.params.id);
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ success: false, message: 'Error deleting user', error: err.message });
+  }
+});
+
+// === INVENTORY ROUTES (Web App Compatible) ===
+app.get('/api/getStock', async (req, res) => {
+  try {
+    const vehicleStocks = await VehicleStock.find({}).sort({ createdAt: -1 });
+    res.json(vehicleStocks); // Web app expects direct array
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/createStock', async (req, res) => {
+  try {
+    const stockData = req.body;
+    const newStock = new VehicleStock(stockData);
+    const savedStock = await newStock.save();
+    res.json({ success: true, data: savedStock });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// === DRIVER ALLOCATION ROUTES (Web App Compatible) ===
+app.get('/api/getAllocation', async (req, res) => {
+  try {
+    const allocations = await DriverAllocation.find({}).sort({ createdAt: -1 });
+    res.json(allocations); // Web app expects direct array
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/createAllocation', async (req, res) => {
+  try {
+    const allocationData = req.body;
+    const newAllocation = new DriverAllocation(allocationData);
+    await newAllocation.save();
+    res.json({ success: true, data: newAllocation });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// === SERVICE REQUEST ROUTES (Web App Compatible) ===
+app.get('/api/getRequest', async (req, res) => {
+  try {
+    const requests = await VehiclePreparation.find({}).sort({ createdAt: -1 });
+    res.json(requests); // Web app expects direct array
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/getRequest/:id', async (req, res) => {
+  try {
+    const request = await VehiclePreparation.findById(req.params.id);
+    if (!request) {
+      return res.status(404).json({ success: false, message: 'Request not found' });
+    }
+    res.json(request);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/getCompletedRequests', async (req, res) => {
+  try {
+    const completedRequests = await VehiclePreparation.find({ status: 'Completed' }).sort({ createdAt: -1 });
+    res.json(completedRequests);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.post('/api/createRequest', async (req, res) => {
+  try {
+    const requestData = req.body;
+    const newRequest = new VehiclePreparation(requestData);
+    await newRequest.save();
+    res.json({ success: true, data: newRequest });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ================== ORIGINAL MOBILE ROUTES (Legacy Support) ==================
 
 // === AUTH ===
 app.post('/login', async (req, res) => {
@@ -477,7 +658,7 @@ app.get('/test', (req, res) => {
 });
 
 // ================== START SERVER ==================
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8000; // Changed to 8000 to match web app
 
 console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
 console.log(`🌐 Starting server on port ${PORT}...`);
@@ -485,6 +666,22 @@ console.log(`🌐 Starting server on port ${PORT}...`);
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log('📚 Available endpoints:');
+  console.log('  === WEB APP COMPATIBLE ROUTES (/api) ===');
+  console.log('  - POST /api/login');
+  console.log('  - POST /api/logout');
+  console.log('  - GET  /api/checkAuth');
+  console.log('  - GET  /api/getUsers');
+  console.log('  - POST /api/createUser');
+  console.log('  - DELETE /api/deleteUser/:id');
+  console.log('  - GET  /api/getStock');
+  console.log('  - POST /api/createStock');
+  console.log('  - GET  /api/getAllocation');
+  console.log('  - POST /api/createAllocation');
+  console.log('  - GET  /api/getRequest');
+  console.log('  - GET  /api/getRequest/:id');
+  console.log('  - GET  /api/getCompletedRequests');
+  console.log('  - POST /api/createRequest');
+  console.log('  === MOBILE APP LEGACY ROUTES ===');
   console.log('  - GET  /');
   console.log('  - GET  /test');
   console.log('  - POST /login');
