@@ -281,6 +281,11 @@ app.get('/dashboard/stats', async (req, res) => {
   }
 });
 
+// === ROOT ROUTE (for Render health check) ===
+app.get('/', (req, res) => {
+  res.send('I-Track Backend is running 🚀');
+});
+
 // === TEST ===
 app.get('/test', (req, res) => {
   res.send('Server test successful!');
@@ -295,6 +300,7 @@ console.log(`🌐 Starting server on port ${PORT}...`);
 const server = app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log('📚 Available endpoints:');
+  console.log('  - GET  /');
   console.log('  - GET  /test');
   console.log('  - POST /login');
   console.log('  - POST /admin/create-user');
