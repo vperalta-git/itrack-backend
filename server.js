@@ -116,7 +116,7 @@ const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSche
 app.post('/login', async (req, res) => {
   try {
     let { username, password, role } = req.body;
-    console.log('📥 Login Attempt:', { username, role });
+    console.log('📥 Login Attempt:', { username, password: '***', role });
 
     if (!username || !password) {
       return res
@@ -125,19 +125,30 @@ app.post('/login', async (req, res) => {
     }
 
     username = username.toLowerCase().trim();
+    console.log('🔍 Searching for user:', username);
 
-    const user = await User.findOne({ username });
+    // Try both lowercase and original case
+    let user = await User.findOne({ username });
+    if (!user) {
+      // Try with original case if lowercase doesn't work
+      user = await User.findOne({ username: req.body.username.trim() });
+    }
+    console.log('👤 User found:', user ? `Yes - Role: ${user.role}` : 'No');
+    
     if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
 
+    console.log('🔐 Password check:', password === user.password ? 'Match' : 'No match');
     if (password !== user.password)
       return res.status(401).json({ success: false, message: 'Invalid password' });
 
     if (role && user.role !== role) {
+      console.log('🚫 Role mismatch:', { expected: role, actual: user.role });
       return res
         .status(403)
         .json({ success: false, message: `Access denied for role: ${role}` });
     }
 
+    console.log('✅ Login successful for:', user.accountName || user.username);
     res.json({
       success: true,
       message: 'Login successful',
