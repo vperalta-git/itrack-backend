@@ -22,13 +22,10 @@ const mongoURI = process.env.MONGODB_URI ||
 
 console.log('🔌 Connecting to MongoDB...');
 
-// Connect to MongoDB Atlas with Render-optimized settings
+// Connect to MongoDB Atlas
 mongoose.connect(mongoURI, {
-    serverSelectionTimeoutMS: 30000, // Increased for Render
-    connectTimeoutMS: 30000,
-    maxPoolSize: 10,
-    bufferCommands: false,
-    bufferMaxEntries: 0
+    serverSelectionTimeoutMS: 10000,
+    connectTimeoutMS: 10000,
   })
   .then(() => console.log('✅ Connected to MongoDB Atlas'))
   .catch((err) => {
@@ -534,18 +531,8 @@ app.get('/test', (req, res) => {
   res.send('Server test successful! (FIXED VERSION)');
 });
 
-// Health check endpoint for Render
-app.get('/health', (req, res) => {
-  res.status(200).json({
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
-});
-
 // ================== START SERVER ==================
-// Use dynamic port for Render deployment
-const PORT = process.env.PORT || 10000;
+const PORT = process.env.PORT || 8000;
 
 console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
 console.log(`🌐 Starting server on port ${PORT}...`);
@@ -581,8 +568,6 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('  - PATCH /vehicles/:id');
   console.log('  === DASHBOARD ===');
   console.log('  - GET  /dashboard/stats');
-  console.log('  === HEALTH ===');
-  console.log('  - GET  /health');
   console.log('✅ FIXED Server initialization complete!');
 });
 
@@ -594,21 +579,6 @@ server.on('error', (err) => {
   } else {
     console.error('🔥 Server error:', err);
   }
-});
-
-// Graceful shutdown for Render
-process.on('SIGTERM', () => {
-  console.log('SIGTERM received, shutting down gracefully');
-  server.close(() => {
-    console.log('Process terminated');
-  });
-});
-
-process.on('SIGINT', () => {
-  console.log('SIGINT received, shutting down gracefully');
-  server.close(() => {
-    console.log('Process terminated');
-  });
 });
 
 // ================== ERROR HANDLING ==================

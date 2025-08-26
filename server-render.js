@@ -1,14 +1,14 @@
-console.log('📂 Loading FIXED server.js file...');
+console.log('📂 Loading I-Track Backend for Render Deployment...');
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
 
-console.log('🚀 Starting I-Track Backend Server (FIXED VERSION)...');
+console.log('🚀 Starting I-Track Backend Server...');
 
 const app = express();
 
-// Enable CORS for all origins - Mobile app compatibility
+// Enable CORS for all origins - Render deployment compatibility
 app.use(cors({
   origin: true,
   credentials: true
@@ -16,7 +16,7 @@ app.use(cors({
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
-// MongoDB connection string
+// MongoDB connection string - Use environment variable for production
 const mongoURI = process.env.MONGODB_URI || 
   'mongodb+srv://itrack_user:itrack123@cluster0.py8s8pl.mongodb.net/itrackDB?retryWrites=true&w=majority&appName=Cluster0';
 
@@ -527,11 +527,11 @@ app.get('/dashboard/stats', async (req, res) => {
 
 // === ROOT ROUTES ===
 app.get('/', (req, res) => {
-  res.send('I-Track Backend is running 🚀 (FIXED VERSION)');
+  res.send('I-Track Backend is running 🚀 (Render Deployment)');
 });
 
 app.get('/test', (req, res) => {
-  res.send('Server test successful! (FIXED VERSION)');
+  res.send('Server test successful! (Render Deployment)');
 });
 
 // Health check endpoint for Render
@@ -583,13 +583,12 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('  - GET  /dashboard/stats');
   console.log('  === HEALTH ===');
   console.log('  - GET  /health');
-  console.log('✅ FIXED Server initialization complete!');
+  console.log('✅ Render deployment server initialization complete!');
 });
 
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`❌ Port ${PORT} is already in use!`);
-    console.log('💡 Try using a different port: PORT=5001 node server-fixed.js');
     process.exit(1);
   } else {
     console.error('🔥 Server error:', err);
