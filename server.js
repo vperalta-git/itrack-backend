@@ -3,6 +3,14 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
 
+// Import models
+const User = require('./models/User');
+const DriverAllocation = require('./models/DriverAllocation');
+const Inventory = require('./models/Inventory');
+const ServiceRequest = require('./models/Servicerequest');
+const CompletedRequest = require('./models/CompletedRequest');
+const InProgressRequest = require('./models/InProgressRequest');
+
 console.log('🚀 Starting I-Track Mobile Backend Server...');
 
 const app = express();
@@ -49,78 +57,7 @@ mongoose.connect(mongoURI, {
 })
 .catch(err => console.error('❌ MongoDB connection error:', err));
 
-// ================== SCHEMAS ==================
-
-// User Schema
-const UserSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  role: { type: String, required: true },
-  accountName: { type: String, required: true },
-  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-});
-
-// Driver Allocation Schema
-const DriverAllocationSchema = new mongoose.Schema({
-  unitName: String,
-  conductionNumber: String, 
-  unitId: String,
-  bodyColor: String,
-  variation: String,
-  assignedDriver: String,
-  status: String,
-  date: { type: Date, default: Date.now },
-  allocatedBy: String,
-}, { timestamps: true });
-
-// Inventory Schema  
-const InventorySchema = new mongoose.Schema({
-  unitName: String,
-  unitId: String,
-  bodyColor: String,
-  variation: String,
-  quantity: { type: Number, default: 1 },
-}, { timestamps: true });
-
-// Vehicle Stock Schema
-const VehicleStockSchema = new mongoose.Schema({
-  unitName: String,
-  bodyColor: String,
-  variation: String,
-  unitId: String,
-}, { timestamps: true });
-
-// Service Request Schema
-const ServiceRequestSchema = new mongoose.Schema({
-  dateCreated: Date,
-  vehicleRegNo: String,
-  service: Array,
-  status: String,
-  inProgressAt: Date,
-  completedAt: Date,
-  serviceDurationMinutes: Number,
-  preparedBy: String,
-}, { timestamps: true });
-
-// Completed Request Schema
-const CompletedRequestSchema = new mongoose.Schema({
-  dateCreated: Date,
-  vehicleRegNo: String,
-  service: Array,
-  status: String,
-  inProgressAt: Date,
-  completedAt: Date,
-  serviceDurationMinutes: Number,
-  preparedBy: String,
-}, { timestamps: true });
-
-// ================== MODELS ==================
-const User = mongoose.model('User', UserSchema);
-const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema);
-const Inventory = mongoose.model('Inventory', InventorySchema);
-const VehicleStock = mongoose.model('VehicleStock', VehicleStockSchema);
-const ServiceRequest = mongoose.model('ServiceRequest', ServiceRequestSchema);
-const CompletedRequest = mongoose.model('CompletedRequest', CompletedRequestSchema);
+// ================== API CONFIGURATION ==================
 
 // ================== API ROUTES ==================
 
@@ -276,7 +213,7 @@ app.get('/getAllocation', async (req, res) => {
 // Create Driver Allocation
 app.post('/createAllocation', async (req, res) => {
   try {
-    const { unitName, unitId, bodyColor, variation, assignedDriver, status, allocatedBy } = req.body;
+    const { unitName, unitId, bodyColor, variation, assignedDriver, assignedAgent, status, allocatedBy, requestedProcesses } = req.body;
     
     const newAllocation = new DriverAllocation({
       unitName,
@@ -284,8 +221,15 @@ app.post('/createAllocation', async (req, res) => {
       bodyColor,
       variation,
       assignedDriver,
-      status: status || 'Pending',
+      assignedAgent,
+      status: status || 'Assigned',
       allocatedBy: allocatedBy || 'Admin',
+      requestedProcesses: requestedProcesses || [],
+      overallProgress: {
+        completed: 0,
+        total: requestedProcesses ? requestedProcesses.length : 0,
+        isComplete: false
+      },
       date: new Date()
     });
 
@@ -294,6 +238,102 @@ app.post('/createAllocation', async (req, res) => {
     res.json({ success: true, message: 'Allocation created successfully', data: newAllocation });
   } catch (error) {
     console.error('❌ Create allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update Process Status (for Dispatch)
+app.put('/updateProcess/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { processName, isCompleted, completedBy } = req.body;
+    
+    const allocation = await DriverAllocation.findById(id);
+    if (!allocation) {
+      return res.status(404).json({ success: false, error: 'Allocation not found' });
+    }
+
+    // Update process status
+    allocation.processStatus[processName] = isCompleted;
+    
+    if (isCompleted) {
+      allocation.processCompletedBy[processName] = completedBy;
+      allocation.processCompletedAt[processName] = new Date();
+    } else {
+      allocation.processCompletedBy[processName] = undefined;
+      allocation.processCompletedAt[processName] = undefined;
+    }
+
+    // Calculate overall progress
+    const completedProcesses = Object.values(allocation.processStatus).filter(status => status === true).length;
+    allocation.overallProgress.completed = completedProcesses;
+    allocation.overallProgress.total = allocation.requestedProcesses.length;
+    allocation.overallProgress.isComplete = completedProcesses === allocation.requestedProcesses.length;
+
+    // Auto-update status based on progress
+    if (allocation.overallProgress.isComplete && allocation.requestedProcesses.length > 0) {
+      allocation.status = 'Ready for Release';
+      allocation.readyForRelease = true;
+    }
+
+    await allocation.save();
+    
+    console.log(`✅ Updated process ${processName} for allocation:`, allocation.unitName);
+    res.json({ success: true, message: 'Process updated successfully', data: allocation });
+  } catch (error) {
+    console.error('❌ Update process error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Add Processes to Allocation (for Admin)
+app.put('/addProcesses/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { requestedProcesses } = req.body;
+    
+    const allocation = await DriverAllocation.findById(id);
+    if (!allocation) {
+      return res.status(404).json({ success: false, error: 'Allocation not found' });
+    }
+
+    allocation.requestedProcesses = requestedProcesses;
+    allocation.overallProgress.total = requestedProcesses.length;
+    allocation.overallProgress.completed = Object.values(allocation.processStatus).filter(status => status === true).length;
+    allocation.overallProgress.isComplete = allocation.overallProgress.completed === allocation.overallProgress.total;
+
+    await allocation.save();
+    
+    console.log('✅ Added processes to allocation:', allocation.unitName);
+    res.json({ success: true, message: 'Processes added successfully', data: allocation });
+  } catch (error) {
+    console.error('❌ Add processes error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Mark as Ready for Release
+app.put('/markReady/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { releasedBy } = req.body;
+    
+    const allocation = await DriverAllocation.findById(id);
+    if (!allocation) {
+      return res.status(404).json({ success: false, error: 'Allocation not found' });
+    }
+
+    allocation.readyForRelease = true;
+    allocation.releasedAt = new Date();
+    allocation.releasedBy = releasedBy;
+    allocation.status = 'Ready for Release';
+
+    await allocation.save();
+    
+    console.log('✅ Marked as ready for release:', allocation.unitName);
+    res.json({ success: true, message: 'Vehicle marked as ready for release', data: allocation });
+  } catch (error) {
+    console.error('❌ Mark ready error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -328,6 +368,56 @@ app.post('/createStock', async (req, res) => {
     res.json({ success: true, message: 'Stock created successfully', data: newStock });
   } catch (error) {
     console.error('❌ Create stock error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update Stock
+app.put('/updateStock/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { unitName, unitId, bodyColor, variation, quantity, status } = req.body;
+    
+    const updatedStock = await Inventory.findByIdAndUpdate(
+      id,
+      {
+        unitName,
+        unitId,
+        bodyColor,
+        variation,
+        quantity: quantity || 1,
+        status: status || 'Available'
+      },
+      { new: true, runValidators: true }
+    );
+    
+    if (!updatedStock) {
+      return res.status(404).json({ success: false, error: 'Stock item not found' });
+    }
+
+    console.log('✅ Updated stock:', updatedStock.unitName);
+    res.json({ success: true, message: 'Stock updated successfully', data: updatedStock });
+  } catch (error) {
+    console.error('❌ Update stock error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete Stock
+app.delete('/deleteStock/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    const deletedStock = await Inventory.findByIdAndDelete(id);
+    
+    if (!deletedStock) {
+      return res.status(404).json({ success: false, error: 'Stock item not found' });
+    }
+
+    console.log('✅ Deleted stock:', deletedStock.unitName);
+    res.json({ success: true, message: 'Stock deleted successfully', data: deletedStock });
+  } catch (error) {
+    console.error('❌ Delete stock error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -406,8 +496,13 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('  - DELETE /deleteUser/:id');
   console.log('  - GET  /getAllocation');
   console.log('  - POST /createAllocation');
+  console.log('  - PUT  /updateProcess/:id');
+  console.log('  - PUT  /addProcesses/:id');
+  console.log('  - PUT  /markReady/:id');
   console.log('  - GET  /getStock');
   console.log('  - POST /createStock');
+  console.log('  - PUT  /updateStock/:id');
+  console.log('  - DELETE /deleteStock/:id');
   console.log('  - GET  /getRequest');
   console.log('  - GET  /getCompletedRequests');
   console.log('  - GET  /dashboard/stats');
