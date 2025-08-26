@@ -7,90 +7,6 @@ console.log('🚀 Starting I-Track Mobile Backend Server...');
 
 const app = express();
 
-// ================== API CONFIGURATION ==================
-const API_CONFIG = {
-  // Development/Local Backend (current server)
-  LOCAL_BACKEND: {
-    BASE_URL: 'http://192.168.254.147:5000',
-    NAME:  console.loapp.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Mobile Backend Server running on port ${PORT}`);
-  console.log('📋 Available endpoints:');
-  console.log('  - POST /login');
-  console.log('  - GET  /getUsers');
-  console.log('  - POST /createUser');
-  console.log('  - DELETE /deleteUser/:id');
-  console.log('  - GET  /getAllocation');
-  console.log('  - POST /createAllocation');
-  console.log('  - GET  /getStock');
-  console.log('  - POST /createStock');
-  console.log('  - GET  /getRequest');
-  console.log('  - GET  /getCompletedRequests');
-  console.log('  - GET  /dashboard/stats');
-  console.log('  - GET  /api/config');
-  console.log('  - GET  /test');
-  console.log('  - GET  /health');
-  console.log('✅ Ready for mobile app connections!');
-});endpoints:');
-  console.log('  - POST /login');
-  console.log('  - GET  /getUsers');
-  console.log('  - POST /createUser');
-  console.log('  - DELETE /deleteUser/:id');
-  console.log('  - GET  /getAllocation');
-  console.log('  - POST /createAllocation');
-  console.log('  - GET  /getStock');
-  console.log('  - POST /createStock');
-  console.log('  - GET  /getRequest');
-  console.log('  - GET  /getCompletedRequests');
-  console.log('  - GET  /dashboard/stats');
-  console.log('  - GET  /api/config');
-  console.log('  - GET  /test');
-  console.log('  - GET  /health');lopment Backend'
-  },
-  
-  // Production Render Backend
-  RENDER_BACKEND: {
-    BASE_URL: 'https://itrack-backend-1.onrender.com',
-    NAME: 'Render Production Backend'
-  }
-};
-
-// Current active backend (this server)
-const ACTIVE_BACKEND = API_CONFIG.LOCAL_BACKEND;
-
-// API endpoints mapping
-const API_ENDPOINTS = {
-  // Authentication
-  LOGIN: '/login',
-  LOGOUT: '/logout',
-  CHECK_AUTH: '/checkAuth',
-  
-  // Users
-  GET_USERS: '/getUsers',
-  CREATE_USER: '/createUser',
-  DELETE_USER: '/deleteUser',
-  UPDATE_USER: '/updateUser',
-  
-  // Driver Allocations
-  GET_ALLOCATION: '/getAllocation',
-  CREATE_ALLOCATION: '/createAllocation',
-  
-  // Service Requests
-  GET_REQUEST: '/getRequest',
-  CREATE_REQUEST: '/createRequest',
-  GET_COMPLETED_REQUESTS: '/getCompletedRequests',
-  
-  // Inventory/Stock
-  GET_STOCK: '/getStock',
-  CREATE_STOCK: '/createStock',
-  
-  // Password Reset
-  FORGOT_PASSWORD: '/forgot-password',
-  RESET_PASSWORD: '/reset-password'
-};
-
-console.log(`📱 API Server: ${ACTIVE_BACKEND.NAME}`);
-console.log(`🔗 Base URL: ${ACTIVE_BACKEND.BASE_URL}`);
-
 // Enable CORS for all origins
 app.use(cors());
 app.use(express.json());
@@ -107,29 +23,33 @@ mongoose.connect(mongoURI, {
   console.log('✅ Connected to MongoDB Atlas');
   
   // Create sample data if database is empty
-  const userCount = await User.countDocuments();
-  if (userCount === 0) {
-    console.log('📝 Creating sample users...');
-    
-    const sampleUsers = [
-      { username: 'admin', password: 'admin123', role: 'Admin', accountName: 'Administrator' },
-      { username: 'manager1', password: 'manager123', role: 'Manager', accountName: 'John Manager' },
-      { username: 'agent1', password: 'agent123', role: 'Sales Agent', accountName: 'Alice Agent' },
-      { username: 'agent2', password: 'agent123', role: 'Sales Agent', accountName: 'Bob Agent' },
-      { username: 'driver1', password: 'driver123', role: 'Driver', accountName: 'Charlie Driver' },
-      { username: 'supervisor1', password: 'supervisor123', role: 'Supervisor', accountName: 'David Supervisor' }
-    ];
+  try {
+    const userCount = await User.countDocuments();
+    if (userCount === 0) {
+      console.log('📝 Creating sample users...');
+      
+      const sampleUsers = [
+        { username: 'admin', password: 'admin123', role: 'Admin', accountName: 'Administrator' },
+        { username: 'manager1', password: 'manager123', role: 'Manager', accountName: 'John Manager' },
+        { username: 'agent1', password: 'agent123', role: 'Sales Agent', accountName: 'Alice Agent' },
+        { username: 'agent2', password: 'agent123', role: 'Sales Agent', accountName: 'Bob Agent' },
+        { username: 'driver1', password: 'driver123', role: 'Driver', accountName: 'Charlie Driver' },
+        { username: 'supervisor1', password: 'supervisor123', role: 'Supervisor', accountName: 'David Supervisor' }
+      ];
 
-    for (const userData of sampleUsers) {
-      const user = new User(userData);
-      await user.save();
-      console.log(`✅ Created sample user: ${user.username} (${user.role})`);
+      for (const userData of sampleUsers) {
+        const user = new User(userData);
+        await user.save();
+        console.log(`✅ Created sample user: ${user.username} (${user.role})`);
+      }
     }
+  } catch (err) {
+    console.log('⚠️ Sample data creation will run after models are defined');
   }
 })
 .catch(err => console.error('❌ MongoDB connection error:', err));
 
-// ================== SCHEMAS (Original Working Versions) ==================
+// ================== SCHEMAS ==================
 
 // User Schema
 const UserSchema = new mongoose.Schema({
@@ -202,15 +122,30 @@ const VehicleStock = mongoose.model('VehicleStock', VehicleStockSchema);
 const ServiceRequest = mongoose.model('ServiceRequest', ServiceRequestSchema);
 const CompletedRequest = mongoose.model('CompletedRequest', CompletedRequestSchema);
 
-// ================== MOBILE APP ROUTES (Original Working) ==================
+// ================== API ROUTES ==================
 
-// API Configuration endpoint - provides config to mobile app
+// API Configuration endpoint
 app.get('/api/config', (req, res) => {
   res.json({
     success: true,
     config: {
-      backend: ACTIVE_BACKEND,
-      endpoints: API_ENDPOINTS,
+      backend: {
+        BASE_URL: 'http://192.168.254.147:5000',
+        NAME: 'Local Development Backend'
+      },
+      endpoints: {
+        LOGIN: '/login',
+        GET_USERS: '/getUsers',
+        CREATE_USER: '/createUser',
+        DELETE_USER: '/deleteUser',
+        GET_ALLOCATION: '/getAllocation',
+        CREATE_ALLOCATION: '/createAllocation',
+        GET_STOCK: '/getStock',
+        CREATE_STOCK: '/createStock',
+        GET_REQUEST: '/getRequest',
+        GET_COMPLETED_REQUESTS: '/getCompletedRequests',
+        DASHBOARD_STATS: '/dashboard/stats'
+      },
       serverInfo: {
         name: 'I-Track Mobile Backend',
         version: '1.0.0',
@@ -464,9 +399,11 @@ const PORT = process.env.PORT || 5000;
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Mobile Backend Server running on port ${PORT}`);
-  console.log('� Available endpoints:');
+  console.log('📋 Available endpoints:');
   console.log('  - POST /login');
   console.log('  - GET  /getUsers');
+  console.log('  - POST /createUser');
+  console.log('  - DELETE /deleteUser/:id');
   console.log('  - GET  /getAllocation');
   console.log('  - POST /createAllocation');
   console.log('  - GET  /getStock');
@@ -474,6 +411,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('  - GET  /getRequest');
   console.log('  - GET  /getCompletedRequests');
   console.log('  - GET  /dashboard/stats');
+  console.log('  - GET  /api/config');
   console.log('  - GET  /test');
   console.log('  - GET  /health');
   console.log('✅ Ready for mobile app connections!');
@@ -486,4 +424,4 @@ process.on('unhandledRejection', (err) => {
 
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err.message);
-});
+})
