@@ -543,6 +543,32 @@ app.delete('/deleteStock/:id', async (req, res) => {
   }
 });
 
+// Update Inventory (API endpoint for frontend)
+app.put('/api/inventory/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    console.log(`📋 Updating inventory item ${id}:`, updateData);
+    
+    const updatedItem = await Inventory.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+    
+    if (!updatedItem) {
+      return res.status(404).json({ success: false, error: 'Inventory item not found' });
+    }
+
+    console.log('✅ Updated inventory item:', updatedItem.unitName);
+    res.json({ success: true, message: 'Inventory updated successfully', data: updatedItem });
+  } catch (error) {
+    console.error('❌ Update inventory error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get Service Requests
 app.get('/getRequest', async (req, res) => {
   try {
@@ -595,6 +621,122 @@ app.get('/dashboard/stats', async (req, res) => {
   }
 });
 
+// Dispatch Assignment Schema
+const DispatchAssignmentSchema = new mongoose.Schema({
+  vehicleId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  unitName: { type: String, required: true },
+  unitId: String,
+  bodyColor: String,
+  variation: String,
+  processes: [String], // Array of process IDs
+  status: { type: String, default: 'Assigned to Dispatch' },
+  assignedAt: { type: Date, default: Date.now },
+  assignedBy: String,
+  processStatus: {
+    type: Map,
+    of: Boolean,
+    default: {}
+  },
+  processCompletedBy: {
+    type: Map,
+    of: String,
+    default: {}
+  },
+  processCompletedAt: {
+    type: Map,
+    of: Date,
+    default: {}
+  }
+});
+const DispatchAssignment = mongoose.model('DispatchAssignment', DispatchAssignmentSchema);
+
+// ================== DISPATCH ASSIGNMENT ENDPOINTS ==================
+
+// Create Dispatch Assignment
+app.post('/api/dispatch/assignments', async (req, res) => {
+  try {
+    console.log('📋 Creating dispatch assignment:', req.body);
+    
+    const assignmentData = req.body;
+    
+    // Create new dispatch assignment
+    const newAssignment = new DispatchAssignment(assignmentData);
+    
+    // Initialize process status map
+    if (assignmentData.processes && Array.isArray(assignmentData.processes)) {
+      const processStatusMap = {};
+      assignmentData.processes.forEach(processId => {
+        processStatusMap[processId] = false;
+      });
+      newAssignment.processStatus = processStatusMap;
+    }
+    
+    const savedAssignment = await newAssignment.save();
+    
+    console.log('✅ Dispatch assignment created:', savedAssignment._id);
+    res.json({ 
+      success: true, 
+      message: 'Dispatch assignment created successfully',
+      assignment: savedAssignment 
+    });
+    
+  } catch (error) {
+    console.error('❌ Create dispatch assignment error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get Dispatch Assignments
+app.get('/api/dispatch/assignments', async (req, res) => {
+  try {
+    console.log('📋 Fetching dispatch assignments...');
+    
+    const assignments = await DispatchAssignment.find().sort({ assignedAt: -1 });
+    
+    console.log(`✅ Found ${assignments.length} dispatch assignments`);
+    res.json({ success: true, data: assignments });
+    
+  } catch (error) {
+    console.error('❌ Get dispatch assignments error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update Dispatch Assignment Process
+app.put('/api/dispatch/assignments/:id/process', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { processId, completed, completedBy } = req.body;
+    
+    console.log(`📋 Updating process ${processId} for assignment ${id}`);
+    
+    const assignment = await DispatchAssignment.findById(id);
+    if (!assignment) {
+      return res.status(404).json({ success: false, error: 'Assignment not found' });
+    }
+    
+    // Update process status
+    assignment.processStatus.set(processId, completed);
+    
+    if (completed) {
+      assignment.processCompletedBy.set(processId, completedBy);
+      assignment.processCompletedAt.set(processId, new Date());
+    } else {
+      assignment.processCompletedBy.delete(processId);
+      assignment.processCompletedAt.delete(processId);
+    }
+    
+    await assignment.save();
+    
+    console.log('✅ Process status updated');
+    res.json({ success: true, assignment });
+    
+  } catch (error) {
+    console.error('❌ Update process error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Test endpoint
 app.get('/test', (req, res) => {
   res.json({ success: true, message: 'Mobile backend server is running!' });
@@ -624,9 +766,13 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('  - POST /createStock');
   console.log('  - PUT  /updateStock/:id');
   console.log('  - DELETE /deleteStock/:id');
+  console.log('  - PUT  /api/inventory/:id');
   console.log('  - GET  /getRequest');
   console.log('  - GET  /getCompletedRequests');
   console.log('  - GET  /dashboard/stats');
+  console.log('  - POST /api/dispatch/assignments');
+  console.log('  - GET  /api/dispatch/assignments');
+  console.log('  - PUT  /api/dispatch/assignments/:id/process');
   console.log('  - GET  /api/config');
   console.log('  - GET  /test');
   console.log('  - GET  /health');
