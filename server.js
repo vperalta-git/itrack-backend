@@ -3,14 +3,6 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
 
-// Import models
-const User = require('./models/User');
-const DriverAllocation = require('./models/DriverAllocation');
-const Inventory = require('./models/Inventory');
-const ServiceRequest = require('./models/Servicerequest');
-const CompletedRequest = require('./models/CompletedRequest');
-const InProgressRequest = require('./models/InProgressRequest');
-
 console.log('🚀 Starting I-Track Mobile Backend Server...');
 
 const app = express();
@@ -22,6 +14,135 @@ app.use(express.json());
 // MongoDB connection
 const mongoURI = process.env.MONGODB_URI || 
   'mongodb+srv://itrack_user:itrack123@cluster0.py8s8pl.mongodb.net/itrackDB?retryWrites=true&w=majority&appName=Cluster0';
+
+// User Schema with Role Validation
+const UserSchema = new mongoose.Schema({
+  username: { type: String, required: true },
+  password: { type: String, required: true },
+  role: { type: String, enum: ['admin', 'supervisor', 'manager', 'salesAgent', 'Admin', 'Manager', 'Sales Agent', 'Driver', 'Supervisor'], default: 'salesAgent' },
+  accountName: { type: String, required: true },
+  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+});
+const User = mongoose.model('User', UserSchema);
+
+// Driver Allocation Schema with Process Tracking
+const DriverAllocationSchema = new mongoose.Schema({
+  unitName: String,
+  unitId: String,
+  bodyColor: String,
+  variation: String,
+  assignedDriver: String,
+  assignedAgent: String,
+  status: String,
+  allocatedBy: String,
+  requestedProcesses: [String], // Array of process IDs
+  processStatus: {
+    type: Map,
+    of: Boolean,
+    default: {}
+  }, // Map of process_id -> completion status
+  processCompletedBy: {
+    type: Map,
+    of: String,
+    default: {}
+  }, // Map of process_id -> completed_by_user
+  processCompletedAt: {
+    type: Map,
+    of: Date,
+    default: {}
+  }, // Map of process_id -> completion_date
+  overallProgress: { type: Number, default: 0 }, // Percentage completion
+  isReady: { type: Boolean, default: false }, // Ready for release
+  readyBy: String,
+  readyAt: Date,
+  date: { type: Date, default: Date.now }
+}, { timestamps: true });
+const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema);
+
+// Inventory Schema  
+const InventorySchema = new mongoose.Schema({
+  vin: { type: String, required: true, unique: true },
+  model: { type: String, required: true },
+  color: { type: String, required: true },
+  year: { type: Number, required: true },
+  status: { 
+    type: String, 
+    enum: ['Available', 'Reserved', 'Sold'], 
+    default: 'Available' 
+  },
+  price: { type: Number, required: true },
+  location: String,
+  description: String,
+  features: [String],
+  images: [String],
+  dateAdded: { type: Date, default: Date.now },
+  lastUpdated: { type: Date, default: Date.now }
+});
+const Inventory = mongoose.model('Inventory', InventorySchema);
+
+// Service Request Schema
+const ServiceRequestSchema = new mongoose.Schema({
+  requestId: { type: String, required: true, unique: true },
+  customerName: { type: String, required: true },
+  vehicleModel: { type: String, required: true },
+  serviceType: { type: String, required: true },
+  priority: { 
+    type: String, 
+    enum: ['Low', 'Medium', 'High', 'Urgent'], 
+    default: 'Medium' 
+  },
+  status: { 
+    type: String, 
+    enum: ['Pending', 'In Progress', 'Completed', 'Cancelled'], 
+    default: 'Pending' 
+  },
+  assignedTo: String,
+  description: String,
+  estimatedCost: Number,
+  actualCost: Number,
+  dateRequested: { type: Date, default: Date.now },
+  dateCompleted: Date,
+  notes: String
+});
+const ServiceRequest = mongoose.model('ServiceRequest', ServiceRequestSchema);
+
+// Completed Request Schema
+const CompletedRequestSchema = new mongoose.Schema({
+  originalRequestId: { type: String, required: true },
+  customerName: { type: String, required: true },
+  vehicleModel: { type: String, required: true },
+  serviceType: { type: String, required: true },
+  completedBy: String,
+  completionDate: { type: Date, default: Date.now },
+  finalCost: Number,
+  customerSatisfaction: {
+    type: Number,
+    min: 1,
+    max: 5
+  },
+  notes: String
+});
+const CompletedRequest = mongoose.model('CompletedRequest', CompletedRequestSchema);
+
+// In Progress Request Schema
+const InProgressRequestSchema = new mongoose.Schema({
+  requestId: { type: String, required: true },
+  customerName: { type: String, required: true },
+  vehicleModel: { type: String, required: true },
+  serviceType: { type: String, required: true },
+  assignedTo: { type: String, required: true },
+  startDate: { type: Date, default: Date.now },
+  estimatedCompletion: Date,
+  progress: {
+    type: Number,
+    min: 0,
+    max: 100,
+    default: 0
+  },
+  currentStage: String,
+  notes: String
+});
+const InProgressRequest = mongoose.model('InProgressRequest', InProgressRequestSchema);
 
 mongoose.connect(mongoURI, {
   useNewUrlParser: true,
