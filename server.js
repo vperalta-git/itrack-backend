@@ -1,141 +1,119 @@
-console.log('📂 Loading server.js file...');
-//sss
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 require('dotenv').config();
 
-console.log('🚀 Starting I-Track Backend Server...');
+console.log('🚀 Starting I-Track Mobile Backend Server...');
 
 const app = express();
 
-// Enable CORS for all origins (adjust if needed)
+// Enable CORS for all origins
 app.use(cors());
 app.use(express.json());
 
-// MongoDB connection string
-const mongoURI =
-  process.env.MONGODB_URI ||
+// MongoDB connection
+const mongoURI = process.env.MONGODB_URI || 
   'mongodb+srv://itrack_user:itrack123@cluster0.py8s8pl.mongodb.net/itrackDB?retryWrites=true&w=majority&appName=Cluster0';
 
-console.log('🔌 Connecting to MongoDB...');
-console.log('MongoDB URI:', mongoURI ? 'Set' : 'Not set');
+mongoose.connect(mongoURI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log('✅ Connected to MongoDB Atlas'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
 
-// Connect to MongoDB Atlas
-mongoose
-  .connect(mongoURI, {
-    serverSelectionTimeoutMS: 10000, // 10 seconds
-    connectTimeoutMS: 10000, // 10 seconds
-  })
-  .then(() => {
-    console.log('✅ Connected to MongoDB Atlas');
-  })
-  .catch((err) => {
-    console.error('❌ MongoDB connection error:', err.message);
-    console.log('⚠️ Starting server without MongoDB connection...');
-  });
+// ================== SCHEMAS (Original Working Versions) ==================
 
-// ================== SCHEMAS ==================
+// User Schema
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true, unique: true },
   password: { type: String, required: true },
-  role: {
-    type: String,
-    enum: ['Admin', 'Supervisor', 'Manager', 'Sales Agent', 'Driver', 'Dispatch'],
-    default: 'Sales Agent',
-  },
+  role: { type: String, required: true },
   accountName: { type: String, required: true },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
 });
 
-const VehicleSchema = new mongoose.Schema({
-  vin: String,
+// Driver Allocation Schema
+const DriverAllocationSchema = new mongoose.Schema({
+  unitName: String,
+  conductionNumber: String, 
   unitId: String,
-  model: String,
-  driver: String,
-  current_status: String,
-  requested_processes: [String],
-  preparation_status: {
-    tinting: { type: Boolean, default: false },
-    carwash: { type: Boolean, default: false },
-    ceramic_coating: { type: Boolean, default: false },
-    accessories: { type: Boolean, default: false },
-    rust_proof: { type: Boolean, default: false },
-    ready_for_release: { type: Boolean, default: false },
-  },
-  location: { lat: Number, lng: Number },
-  customer_name: String,
-  customer_number: String,
-});
+  bodyColor: String,
+  variation: String,
+  assignedDriver: String,
+  status: String,
+  date: { type: Date, default: Date.now },
+  allocatedBy: String,
+}, { timestamps: true });
 
-const VehicleStockSchema = new mongoose.Schema(
-  {
-    unitName: String,
-    conductionNumber: String,
-    unitId: String,
-    bodyColor: String,
-    variation: String,
-  },
-  { timestamps: true }
-);
+// Inventory Schema  
+const InventorySchema = new mongoose.Schema({
+  unitName: String,
+  unitId: String,
+  bodyColor: String,
+  variation: String,
+  quantity: { type: Number, default: 1 },
+}, { timestamps: true });
 
-const VehiclePreparationSchema = new mongoose.Schema(
-  {
-    dateCreated: Date,
-    vehicleRegNo: String,
-    service: [{ serviceTime: String, status: String }],
-    status: String,
-  },
-  { timestamps: true }
-);
+// Vehicle Stock Schema
+const VehicleStockSchema = new mongoose.Schema({
+  unitName: String,
+  bodyColor: String,
+  variation: String,
+  unitId: String,
+}, { timestamps: true });
 
-const DriverAllocationSchema = new mongoose.Schema(
-  {
-    unitName: String,
-    conductionNumber: String,
-    unitId: String,
-    bodyColor: String,
-    variation: String,
-    assignedDriver: String,
-    status: String,
-    date: Date,
-  },
-  { timestamps: true }
-);
+// Service Request Schema
+const ServiceRequestSchema = new mongoose.Schema({
+  dateCreated: Date,
+  vehicleRegNo: String,
+  service: Array,
+  status: String,
+  inProgressAt: Date,
+  completedAt: Date,
+  serviceDurationMinutes: Number,
+  preparedBy: String,
+}, { timestamps: true });
+
+// Completed Request Schema
+const CompletedRequestSchema = new mongoose.Schema({
+  dateCreated: Date,
+  vehicleRegNo: String,
+  service: Array,
+  status: String,
+  inProgressAt: Date,
+  completedAt: Date,
+  serviceDurationMinutes: Number,
+  preparedBy: String,
+}, { timestamps: true });
 
 // ================== MODELS ==================
 const User = mongoose.model('User', UserSchema);
-const Vehicle = mongoose.model('Vehicle', VehicleSchema);
-const VehicleStock = mongoose.model('VehicleStock', VehicleStockSchema);
-const VehiclePreparation = mongoose.model('VehiclePreparation', VehiclePreparationSchema);
 const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema);
+const Inventory = mongoose.model('Inventory', InventorySchema);
+const VehicleStock = mongoose.model('VehicleStock', VehicleStockSchema);
+const ServiceRequest = mongoose.model('ServiceRequest', ServiceRequestSchema);
+const CompletedRequest = mongoose.model('CompletedRequest', CompletedRequestSchema);
 
-// ================== ROUTES ==================
+// ================== MOBILE APP ROUTES (Original Working) ==================
 
-// === AUTH ===
+// Login endpoint
 app.post('/login', async (req, res) => {
   try {
-    let { username, password, role } = req.body;
-    console.log('📥 Login Attempt:', { username, role });
-
+    const { username, password } = req.body;
+    console.log('📥 Login attempt:', username);
+    
     if (!username || !password) {
-      return res
-        .status(400)
-        .json({ success: false, message: 'Username and password are required' });
+      return res.status(400).json({ success: false, message: 'Username and password required' });
     }
 
-    username = username.toLowerCase().trim();
+    const user = await User.findOne({ username: username.toLowerCase() });
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
 
-    const user = await User.findOne({ username });
-    if (!user) return res.status(401).json({ success: false, message: 'Invalid credentials' });
-
-    if (password !== user.password)
+    if (user.password !== password) {
       return res.status(401).json({ success: false, message: 'Invalid password' });
-
-    if (role && user.role !== role) {
-      return res
-        .status(403)
-        .json({ success: false, message: `Access denied for role: ${role}` });
     }
 
     res.json({
@@ -145,204 +123,185 @@ app.post('/login', async (req, res) => {
         username: user.username,
         role: user.role,
         accountName: user.accountName,
-        assignedTo: user.assignedTo,
-      },
+        assignedTo: user.assignedTo
+      }
     });
-  } catch (err) {
-    console.error('❌ Login error:', err);
-    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  } catch (error) {
+    console.error('❌ Login error:', error);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 });
 
-// === USER MANAGEMENT ===
-app.post('/admin/create-user', async (req, res) => {
-  try {
-    const { username, password, role, assignedTo, accountName } = req.body;
-    if (!username || !password || !role || !accountName) {
-      return res.status(400).json({ success: false, message: 'Missing required fields' });
-    }
-
-    const newUser = new User({
-      username: username.toLowerCase().trim(),
-      password,
-      role,
-      assignedTo,
-      accountName,
-    });
-
-    await newUser.save();
-    res.json({ success: true, message: 'User created successfully', user: newUser });
-  } catch (err) {
-    if (err.code === 11000) {
-      return res.status(400).json({ success: false, message: 'Username already exists' });
-    }
-    res.status(500).json({ success: false, message: 'Error creating user', error: err.message });
-  }
-});
-
-// === VEHICLES ===
-app.get('/vehicles', async (req, res) => {
-  try {
-    const vehicles = await Vehicle.find({});
-    res.json(vehicles);
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// === DRIVER ALLOCATIONS ===
-app.get('/driver-allocations', async (req, res) => {
-  try {
-    const allocations = await DriverAllocation.find({});
-    res.json({ success: true, data: allocations });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// === DASHBOARD STATS ===
-app.get('/dashboard/stats', async (req, res) => {
-  try {
-    const totalStocks = await VehicleStock.countDocuments();
-    const finishedVehiclePreps = await VehiclePreparation.countDocuments({ status: 'Completed' });
-    const ongoingShipments = await DriverAllocation.countDocuments({ status: 'In Transit' });
-    const ongoingVehiclePreps = await VehiclePreparation.countDocuments({ status: 'In Progress' });
-    const recentVehiclePreps = await VehiclePreparation.countDocuments({
-      createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
-    });
-
-    res.json({
-      totalStocks,
-      finishedVehiclePreps,
-      ongoingShipments,
-      ongoingVehiclePreps,
-      recentVehiclePreps,
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// === MOBILE APP SPECIFIC ENDPOINTS ===
-
-// Get Users (mobile app expects this)
+// Get Users
 app.get('/getUsers', async (req, res) => {
   try {
     const users = await User.find({}).select('-password');
+    console.log(`📊 Found ${users.length} users`);
     res.json({ success: true, data: users });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (error) {
+    console.error('❌ Get users error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Get Allocations (mobile app expects this)
+// Get Driver Allocations
 app.get('/getAllocation', async (req, res) => {
   try {
-    const allocations = await DriverAllocation.find({});
+    const allocations = await DriverAllocation.find({}).sort({ createdAt: -1 });
+    console.log(`📊 Found ${allocations.length} allocations`);
     res.json({ success: true, data: allocations });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (error) {
+    console.error('❌ Get allocations error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Create Allocation (mobile app expects this)
+// Create Driver Allocation
 app.post('/createAllocation', async (req, res) => {
   try {
-    const { unitName, conductionNumber, unitId, bodyColor, variation, assignedDriver, status } = req.body;
+    const { unitName, unitId, bodyColor, variation, assignedDriver, status, allocatedBy } = req.body;
     
     const newAllocation = new DriverAllocation({
       unitName,
-      conductionNumber,
       unitId,
       bodyColor,
       variation,
       assignedDriver,
       status: status || 'Pending',
+      allocatedBy: allocatedBy || 'Admin',
       date: new Date()
     });
 
     await newAllocation.save();
+    console.log('✅ Created allocation:', newAllocation.unitName);
     res.json({ success: true, message: 'Allocation created successfully', data: newAllocation });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (error) {
+    console.error('❌ Create allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Get Stock (mobile app expects this)
+// Get Stock/Inventory
 app.get('/getStock', async (req, res) => {
   try {
-    const stock = await VehicleStock.find({});
-    res.json({ success: true, data: stock });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    const inventory = await Inventory.find({}).sort({ createdAt: -1 });
+    console.log(`📊 Found ${inventory.length} inventory items`);
+    res.json({ success: true, data: inventory });
+  } catch (error) {
+    console.error('❌ Get stock error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Create Stock (mobile app expects this)
+// Create Stock
 app.post('/createStock', async (req, res) => {
   try {
-    const { unitName, conductionNumber, unitId, bodyColor, variation } = req.body;
+    const { unitName, unitId, bodyColor, variation, quantity } = req.body;
     
-    const newStock = new VehicleStock({
+    const newStock = new Inventory({
       unitName,
-      conductionNumber,
       unitId,
       bodyColor,
-      variation
+      variation,
+      quantity: quantity || 1
     });
 
     await newStock.save();
+    console.log('✅ Created stock:', newStock.unitName);
     res.json({ success: true, message: 'Stock created successfully', data: newStock });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+  } catch (error) {
+    console.error('❌ Create stock error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// === TEST ===
+// Get Service Requests
+app.get('/getRequest', async (req, res) => {
+  try {
+    const requests = await ServiceRequest.find({}).sort({ createdAt: -1 });
+    console.log(`📊 Found ${requests.length} service requests`);
+    res.json({ success: true, data: requests });
+  } catch (error) {
+    console.error('❌ Get requests error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get Completed Requests
+app.get('/getCompletedRequests', async (req, res) => {
+  try {
+    const completed = await CompletedRequest.find({}).sort({ completedAt: -1 });
+    console.log(`📊 Found ${completed.length} completed requests`);
+    res.json({ success: true, data: completed });
+  } catch (error) {
+    console.error('❌ Get completed requests error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Dashboard Stats (for reports)
+app.get('/dashboard/stats', async (req, res) => {
+  try {
+    const totalUsers = await User.countDocuments();
+    const totalAllocations = await DriverAllocation.countDocuments();
+    const activeAllocations = await DriverAllocation.countDocuments({ status: 'In Transit' });
+    const totalStock = await Inventory.countDocuments();
+    
+    console.log(`📊 Dashboard stats - Users: ${totalUsers}, Allocations: ${totalAllocations}, Stock: ${totalStock}`);
+    
+    res.json({
+      success: true,
+      data: {
+        totalUsers,
+        totalAllocations,
+        activeAllocations,
+        totalStock,
+        totalVehicles: totalStock,
+        totalDrivers: await User.countDocuments({ role: 'Driver' }),
+        totalAgents: await User.countDocuments({ role: 'Sales Agent' })
+      }
+    });
+  } catch (error) {
+    console.error('❌ Dashboard stats error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Test endpoint
 app.get('/test', (req, res) => {
-  res.send('Server test successful!');
+  res.json({ success: true, message: 'Mobile backend server is running!' });
+});
+
+// Health check
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
 // ================== START SERVER ==================
 const PORT = process.env.PORT || 5000;
 
-console.log(`🔧 Environment: ${process.env.NODE_ENV || 'development'}`);
-console.log(`🌐 Starting server on port ${PORT}...`);
-
-const server = app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log('📚 Available endpoints:');
-  console.log('  - GET  /test');
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Mobile Backend Server running on port ${PORT}`);
+  console.log('� Available endpoints:');
   console.log('  - POST /login');
-  console.log('  - POST /admin/create-user');
-  console.log('  - GET  /vehicles');
-  console.log('  - GET  /driver-allocations');
-  console.log('  - GET  /dashboard/stats');
-  console.log('📱 Mobile App endpoints:');
   console.log('  - GET  /getUsers');
   console.log('  - GET  /getAllocation');
   console.log('  - POST /createAllocation');
   console.log('  - GET  /getStock');
   console.log('  - POST /createStock');
-  console.log('✅ Server initialization complete!');
+  console.log('  - GET  /getRequest');
+  console.log('  - GET  /getCompletedRequests');
+  console.log('  - GET  /dashboard/stats');
+  console.log('  - GET  /test');
+  console.log('  - GET  /health');
+  console.log('✅ Ready for mobile app connections!');
 });
 
-
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`❌ Port ${PORT} is already in use!`);
-    console.log('💡 Try using a different port: PORT=5001 node server.js');
-    process.exit(1);
-  } else {
-    console.error('🔥 Server error:', err);
-  }
-});
-
-// ================== ERROR HANDLING ==================
+// Error handling
 process.on('unhandledRejection', (err) => {
   console.error('❌ Unhandled Promise Rejection:', err.message);
 });
+
 process.on('uncaughtException', (err) => {
   console.error('❌ Uncaught Exception:', err.message);
 });
