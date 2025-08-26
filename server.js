@@ -623,7 +623,7 @@ app.get('/dashboard/stats', async (req, res) => {
 
 // Dispatch Assignment Schema
 const DispatchAssignmentSchema = new mongoose.Schema({
-  vehicleId: { type: mongoose.Schema.Types.ObjectId, required: true },
+  vehicleId: { type: String, required: true }, // Changed from ObjectId to String
   unitName: { type: String, required: true },
   unitId: String,
   bodyColor: String,
