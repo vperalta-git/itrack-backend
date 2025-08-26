@@ -223,6 +223,81 @@ app.get('/dashboard/stats', async (req, res) => {
   }
 });
 
+// === MOBILE APP SPECIFIC ENDPOINTS ===
+
+// Get Users (mobile app expects this)
+app.get('/getUsers', async (req, res) => {
+  try {
+    const users = await User.find({}).select('-password');
+    res.json({ success: true, data: users });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get Allocations (mobile app expects this)
+app.get('/getAllocation', async (req, res) => {
+  try {
+    const allocations = await DriverAllocation.find({});
+    res.json({ success: true, data: allocations });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Create Allocation (mobile app expects this)
+app.post('/createAllocation', async (req, res) => {
+  try {
+    const { unitName, conductionNumber, unitId, bodyColor, variation, assignedDriver, status } = req.body;
+    
+    const newAllocation = new DriverAllocation({
+      unitName,
+      conductionNumber,
+      unitId,
+      bodyColor,
+      variation,
+      assignedDriver,
+      status: status || 'Pending',
+      date: new Date()
+    });
+
+    await newAllocation.save();
+    res.json({ success: true, message: 'Allocation created successfully', data: newAllocation });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get Stock (mobile app expects this)
+app.get('/getStock', async (req, res) => {
+  try {
+    const stock = await VehicleStock.find({});
+    res.json({ success: true, data: stock });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Create Stock (mobile app expects this)
+app.post('/createStock', async (req, res) => {
+  try {
+    const { unitName, conductionNumber, unitId, bodyColor, variation } = req.body;
+    
+    const newStock = new VehicleStock({
+      unitName,
+      conductionNumber,
+      unitId,
+      bodyColor,
+      variation
+    });
+
+    await newStock.save();
+    res.json({ success: true, message: 'Stock created successfully', data: newStock });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // === TEST ===
 app.get('/test', (req, res) => {
   res.send('Server test successful!');
@@ -243,6 +318,12 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('  - GET  /vehicles');
   console.log('  - GET  /driver-allocations');
   console.log('  - GET  /dashboard/stats');
+  console.log('📱 Mobile App endpoints:');
+  console.log('  - GET  /getUsers');
+  console.log('  - GET  /getAllocation');
+  console.log('  - POST /createAllocation');
+  console.log('  - GET  /getStock');
+  console.log('  - POST /createStock');
   console.log('✅ Server initialization complete!');
 });
 
