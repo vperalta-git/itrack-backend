@@ -7,6 +7,58 @@ console.log('🚀 Starting I-Track Mobile Backend Server...');
 
 const app = express();
 
+// ================== API CONFIGURATION ==================
+const API_CONFIG = {
+  // Development/Local Backend (current server)
+  LOCAL_BACKEND: {
+    BASE_URL: 'http://192.168.254.147:5000',
+    NAME: 'Local Development Backend'
+  },
+  
+  // Production Render Backend
+  RENDER_BACKEND: {
+    BASE_URL: 'https://itrack-backend-1.onrender.com',
+    NAME: 'Render Production Backend'
+  }
+};
+
+// Current active backend (this server)
+const ACTIVE_BACKEND = API_CONFIG.LOCAL_BACKEND;
+
+// API endpoints mapping
+const API_ENDPOINTS = {
+  // Authentication
+  LOGIN: '/login',
+  LOGOUT: '/logout',
+  CHECK_AUTH: '/checkAuth',
+  
+  // Users
+  GET_USERS: '/getUsers',
+  CREATE_USER: '/createUser',
+  DELETE_USER: '/deleteUser',
+  UPDATE_USER: '/updateUser',
+  
+  // Driver Allocations
+  GET_ALLOCATION: '/getAllocation',
+  CREATE_ALLOCATION: '/createAllocation',
+  
+  // Service Requests
+  GET_REQUEST: '/getRequest',
+  CREATE_REQUEST: '/createRequest',
+  GET_COMPLETED_REQUESTS: '/getCompletedRequests',
+  
+  // Inventory/Stock
+  GET_STOCK: '/getStock',
+  CREATE_STOCK: '/createStock',
+  
+  // Password Reset
+  FORGOT_PASSWORD: '/forgot-password',
+  RESET_PASSWORD: '/reset-password'
+};
+
+console.log(`📱 API Server: ${ACTIVE_BACKEND.NAME}`);
+console.log(`🔗 Base URL: ${ACTIVE_BACKEND.BASE_URL}`);
+
 // Enable CORS for all origins
 app.use(cors());
 app.use(express.json());
@@ -96,6 +148,22 @@ const ServiceRequest = mongoose.model('ServiceRequest', ServiceRequestSchema);
 const CompletedRequest = mongoose.model('CompletedRequest', CompletedRequestSchema);
 
 // ================== MOBILE APP ROUTES (Original Working) ==================
+
+// API Configuration endpoint - provides config to mobile app
+app.get('/api/config', (req, res) => {
+  res.json({
+    success: true,
+    config: {
+      backend: ACTIVE_BACKEND,
+      endpoints: API_ENDPOINTS,
+      serverInfo: {
+        name: 'I-Track Mobile Backend',
+        version: '1.0.0',
+        timestamp: new Date().toISOString()
+      }
+    }
+  });
+});
 
 // Login endpoint
 app.post('/login', async (req, res) => {
