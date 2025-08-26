@@ -12,7 +12,39 @@ const API_CONFIG = {
   // Development/Local Backend (current server)
   LOCAL_BACKEND: {
     BASE_URL: 'http://192.168.254.147:5000',
-    NAME: 'Local Development Backend'
+    NAME:  console.loapp.listen(PORT, '0.0.0.0', () => {
+  console.log(`🚀 Mobile Backend Server running on port ${PORT}`);
+  console.log('📋 Available endpoints:');
+  console.log('  - POST /login');
+  console.log('  - GET  /getUsers');
+  console.log('  - POST /createUser');
+  console.log('  - DELETE /deleteUser/:id');
+  console.log('  - GET  /getAllocation');
+  console.log('  - POST /createAllocation');
+  console.log('  - GET  /getStock');
+  console.log('  - POST /createStock');
+  console.log('  - GET  /getRequest');
+  console.log('  - GET  /getCompletedRequests');
+  console.log('  - GET  /dashboard/stats');
+  console.log('  - GET  /api/config');
+  console.log('  - GET  /test');
+  console.log('  - GET  /health');
+  console.log('✅ Ready for mobile app connections!');
+});endpoints:');
+  console.log('  - POST /login');
+  console.log('  - GET  /getUsers');
+  console.log('  - POST /createUser');
+  console.log('  - DELETE /deleteUser/:id');
+  console.log('  - GET  /getAllocation');
+  console.log('  - POST /createAllocation');
+  console.log('  - GET  /getStock');
+  console.log('  - POST /createStock');
+  console.log('  - GET  /getRequest');
+  console.log('  - GET  /getCompletedRequests');
+  console.log('  - GET  /dashboard/stats');
+  console.log('  - GET  /api/config');
+  console.log('  - GET  /test');
+  console.log('  - GET  /health');lopment Backend'
   },
   
   // Production Render Backend
@@ -71,7 +103,30 @@ mongoose.connect(mongoURI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
 })
-.then(() => console.log('✅ Connected to MongoDB Atlas'))
+.then(async () => {
+  console.log('✅ Connected to MongoDB Atlas');
+  
+  // Create sample data if database is empty
+  const userCount = await User.countDocuments();
+  if (userCount === 0) {
+    console.log('📝 Creating sample users...');
+    
+    const sampleUsers = [
+      { username: 'admin', password: 'admin123', role: 'Admin', accountName: 'Administrator' },
+      { username: 'manager1', password: 'manager123', role: 'Manager', accountName: 'John Manager' },
+      { username: 'agent1', password: 'agent123', role: 'Sales Agent', accountName: 'Alice Agent' },
+      { username: 'agent2', password: 'agent123', role: 'Sales Agent', accountName: 'Bob Agent' },
+      { username: 'driver1', password: 'driver123', role: 'Driver', accountName: 'Charlie Driver' },
+      { username: 'supervisor1', password: 'supervisor123', role: 'Supervisor', accountName: 'David Supervisor' }
+    ];
+
+    for (const userData of sampleUsers) {
+      const user = new User(userData);
+      await user.save();
+      console.log(`✅ Created sample user: ${user.username} (${user.role})`);
+    }
+  }
+})
 .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // ================== SCHEMAS (Original Working Versions) ==================
@@ -209,6 +264,65 @@ app.get('/getUsers', async (req, res) => {
   } catch (error) {
     console.error('❌ Get users error:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create User
+app.post('/createUser', async (req, res) => {
+  try {
+    const { username, password, role, accountName, assignedTo } = req.body;
+    
+    if (!username || !password || !role || !accountName) {
+      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    }
+
+    // Check if user already exists
+    const existingUser = await User.findOne({ username: username.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({ success: false, message: 'Username already exists' });
+    }
+
+    const newUser = new User({
+      username: username.toLowerCase(),
+      password,
+      role,
+      accountName,
+      assignedTo: assignedTo || null
+    });
+
+    await newUser.save();
+    console.log('✅ Created user:', newUser.username);
+    
+    res.json({ 
+      success: true, 
+      message: 'User created successfully', 
+      user: { 
+        username: newUser.username, 
+        role: newUser.role, 
+        accountName: newUser.accountName 
+      } 
+    });
+  } catch (error) {
+    console.error('❌ Create user error:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Delete User
+app.delete('/deleteUser/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedUser = await User.findByIdAndDelete(id);
+    
+    if (!deletedUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+
+    console.log('✅ Deleted user:', deletedUser.username);
+    res.json({ success: true, message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('❌ Delete user error:', error);
+    res.status(500).json({ success: false, message: error.message });
   }
 });
 
