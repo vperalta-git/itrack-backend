@@ -59,7 +59,27 @@ const DriverAllocationSchema = new mongoose.Schema({
 }, { timestamps: true });
 const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema);
 
-// Inventory Schema  
+// Stock Schema (for vehicle inventory management)
+const StockSchema = new mongoose.Schema({
+  unitName: { type: String, required: true },
+  unitId: { type: String, required: true },
+  bodyColor: { type: String, required: true },
+  variation: String,
+  quantity: { type: Number, default: 1 },
+  status: { 
+    type: String, 
+    enum: ['Available', 'Reserved', 'Sold', 'Assigned to Dispatch', 'In Process', 'Maintenance'], 
+    default: 'Available' 
+  },
+  location: String,
+  description: String,
+  features: [String],
+  images: [String],
+  dateAdded: { type: Date, default: Date.now },
+  lastUpdated: { type: Date, default: Date.now }
+});
+
+// Traditional Inventory Schema (for detailed vehicle records)
 const InventorySchema = new mongoose.Schema({
   vin: { type: String, required: true, unique: true },
   model: { type: String, required: true },
@@ -67,7 +87,7 @@ const InventorySchema = new mongoose.Schema({
   year: { type: Number, required: true },
   status: { 
     type: String, 
-    enum: ['Available', 'Reserved', 'Sold'], 
+    enum: ['Available', 'Reserved', 'Sold', 'Assigned to Dispatch', 'In Process', 'Maintenance'], 
     default: 'Available' 
   },
   price: { type: Number, required: true },
@@ -78,6 +98,8 @@ const InventorySchema = new mongoose.Schema({
   dateAdded: { type: Date, default: Date.now },
   lastUpdated: { type: Date, default: Date.now }
 });
+
+const Stock = mongoose.model('Stock', StockSchema);
 const Inventory = mongoose.model('Inventory', InventorySchema);
 
 // Service Request Schema
@@ -184,29 +206,63 @@ mongoose.connect(mongoURI, {
 
 // API Configuration endpoint
 app.get('/api/config', (req, res) => {
+  const baseUrl = process.env.NODE_ENV === 'production' 
+    ? 'https://itrack-backend.onrender.com' 
+    : 'http://192.168.254.147:5000';
+    
   res.json({
     success: true,
     config: {
       backend: {
-        BASE_URL: 'http://192.168.254.147:5000',
-        NAME: 'Local Development Backend'
+        BASE_URL: baseUrl,
+        NAME: process.env.NODE_ENV === 'production' ? 'Production Backend' : 'Local Development Backend',
+        ENVIRONMENT: process.env.NODE_ENV || 'development'
       },
       endpoints: {
+        // Authentication
         LOGIN: '/login',
+        
+        // User Management
         GET_USERS: '/getUsers',
         CREATE_USER: '/createUser',
         DELETE_USER: '/deleteUser',
+        
+        // Allocation Management
         GET_ALLOCATION: '/getAllocation',
         CREATE_ALLOCATION: '/createAllocation',
+        UPDATE_PROCESS: '/updateProcess',
+        ADD_PROCESSES: '/addProcesses',
+        MARK_READY: '/markReady',
+        
+        // Inventory/Stock Management
         GET_STOCK: '/getStock',
         CREATE_STOCK: '/createStock',
+        UPDATE_STOCK: '/updateStock',
+        DELETE_STOCK: '/deleteStock',
+        UPDATE_INVENTORY: '/api/inventory',
+        
+        // Request Management
         GET_REQUEST: '/getRequest',
         GET_COMPLETED_REQUESTS: '/getCompletedRequests',
-        DASHBOARD_STATS: '/dashboard/stats'
+        
+        // Dispatch Assignment (New)
+        CREATE_DISPATCH_ASSIGNMENT: '/api/dispatch/assignments',
+        GET_DISPATCH_ASSIGNMENTS: '/api/dispatch/assignments',
+        UPDATE_DISPATCH_PROCESS: '/api/dispatch/assignments/:id/process',
+        
+        // System
+        DASHBOARD_STATS: '/dashboard/stats',
+        CONFIG: '/api/config',
+        TEST: '/test',
+        HEALTH: '/health'
+      },
+      helper: {
+        buildApiUrl: (endpoint) => `${baseUrl}${endpoint}`
       },
       serverInfo: {
         name: 'I-Track Mobile Backend',
-        version: '1.0.0',
+        version: '2.0.0',
+        features: ['Dispatch Assignment', 'Process Management', 'Real-time Updates'],
         timestamp: new Date().toISOString()
       }
     }
@@ -462,8 +518,8 @@ app.put('/markReady/:id', async (req, res) => {
 // Get Stock/Inventory
 app.get('/getStock', async (req, res) => {
   try {
-    const inventory = await Inventory.find({}).sort({ createdAt: -1 });
-    console.log(`📊 Found ${inventory.length} inventory items`);
+    const inventory = await Stock.find({}).sort({ createdAt: -1 });
+    console.log(`📊 Found ${inventory.length} stock items`);
     res.json({ success: true, data: inventory });
   } catch (error) {
     console.error('❌ Get stock error:', error);
@@ -476,7 +532,7 @@ app.post('/createStock', async (req, res) => {
   try {
     const { unitName, unitId, bodyColor, variation, quantity } = req.body;
     
-    const newStock = new Inventory({
+    const newStock = new Stock({
       unitName,
       unitId,
       bodyColor,
@@ -499,7 +555,7 @@ app.put('/updateStock/:id', async (req, res) => {
     const { id } = req.params;
     const { unitName, unitId, bodyColor, variation, quantity, status } = req.body;
     
-    const updatedStock = await Inventory.findByIdAndUpdate(
+    const updatedStock = await Stock.findByIdAndUpdate(
       id,
       {
         unitName,
@@ -529,7 +585,7 @@ app.delete('/deleteStock/:id', async (req, res) => {
   try {
     const { id } = req.params;
     
-    const deletedStock = await Inventory.findByIdAndDelete(id);
+    const deletedStock = await Stock.findByIdAndDelete(id);
     
     if (!deletedStock) {
       return res.status(404).json({ success: false, error: 'Stock item not found' });
@@ -549,20 +605,20 @@ app.put('/api/inventory/:id', async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
     
-    console.log(`📋 Updating inventory item ${id}:`, updateData);
+    console.log(`📋 Updating stock item ${id}:`, updateData);
     
-    const updatedItem = await Inventory.findByIdAndUpdate(
+    const updatedItem = await Stock.findByIdAndUpdate(
       id,
       updateData,
       { new: true, runValidators: true }
     );
     
     if (!updatedItem) {
-      return res.status(404).json({ success: false, error: 'Inventory item not found' });
+      return res.status(404).json({ success: false, error: 'Stock item not found' });
     }
 
-    console.log('✅ Updated inventory item:', updatedItem.unitName);
-    res.json({ success: true, message: 'Inventory updated successfully', data: updatedItem });
+    console.log('✅ Updated stock item:', updatedItem.unitName);
+    res.json({ success: true, message: 'Stock updated successfully', data: updatedItem });
   } catch (error) {
     console.error('❌ Update inventory error:', error);
     res.status(500).json({ success: false, error: error.message });
