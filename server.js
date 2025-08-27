@@ -59,8 +59,8 @@ const DriverAllocationSchema = new mongoose.Schema({
 }, { timestamps: true });
 const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema);
 
-// Stock Schema (for vehicle inventory management)
-const StockSchema = new mongoose.Schema({
+// Inventory Schema (updated to match actual usage)
+const InventorySchema = new mongoose.Schema({
   unitName: { type: String, required: true },
   unitId: { type: String, required: true },
   bodyColor: { type: String, required: true },
@@ -79,27 +79,6 @@ const StockSchema = new mongoose.Schema({
   lastUpdated: { type: Date, default: Date.now }
 });
 
-// Traditional Inventory Schema (for detailed vehicle records)
-const InventorySchema = new mongoose.Schema({
-  vin: { type: String, required: true, unique: true },
-  model: { type: String, required: true },
-  color: { type: String, required: true },
-  year: { type: Number, required: true },
-  status: { 
-    type: String, 
-    enum: ['Available', 'Reserved', 'Sold', 'Assigned to Dispatch', 'In Process', 'Maintenance'], 
-    default: 'Available' 
-  },
-  price: { type: Number, required: true },
-  location: String,
-  description: String,
-  features: [String],
-  images: [String],
-  dateAdded: { type: Date, default: Date.now },
-  lastUpdated: { type: Date, default: Date.now }
-});
-
-const Stock = mongoose.model('Stock', StockSchema);
 const Inventory = mongoose.model('Inventory', InventorySchema);
 
 // Service Request Schema
@@ -518,7 +497,7 @@ app.put('/markReady/:id', async (req, res) => {
 // Get Stock/Inventory
 app.get('/getStock', async (req, res) => {
   try {
-    const inventory = await Stock.find({}).sort({ createdAt: -1 });
+    const inventory = await Inventory.find({}).sort({ createdAt: -1 });
     console.log(`📊 Found ${inventory.length} stock items`);
     res.json({ success: true, data: inventory });
   } catch (error) {
@@ -532,7 +511,7 @@ app.post('/createStock', async (req, res) => {
   try {
     const { unitName, unitId, bodyColor, variation, quantity } = req.body;
     
-    const newStock = new Stock({
+    const newStock = new Inventory({
       unitName,
       unitId,
       bodyColor,
@@ -555,7 +534,7 @@ app.put('/updateStock/:id', async (req, res) => {
     const { id } = req.params;
     const { unitName, unitId, bodyColor, variation, quantity, status } = req.body;
     
-    const updatedStock = await Stock.findByIdAndUpdate(
+    const updatedStock = await Inventory.findByIdAndUpdate(
       id,
       {
         unitName,
@@ -607,7 +586,7 @@ app.put('/api/inventory/:id', async (req, res) => {
     
     console.log(`📋 Updating stock item ${id}:`, updateData);
     
-    const updatedItem = await Stock.findByIdAndUpdate(
+    const updatedItem = await Inventory.findByIdAndUpdate(
       id,
       updateData,
       { new: true, runValidators: true }
