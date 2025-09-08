@@ -782,6 +782,61 @@ app.get('/health', (req, res) => {
   res.json({ status: 'OK', timestamp: new Date().toISOString() });
 });
 
+// ================== RELEASE MANAGEMENT ENDPOINTS ==================
+
+// Release History Schema
+const ReleaseHistorySchema = new mongoose.Schema({
+  vehicleId: { type: String, required: true },
+  unitName: { type: String, required: true },
+  unitId: String,
+  bodyColor: String,
+  variation: String,
+  completedProcesses: [String],
+  releasedBy: String,
+  releasedAt: { type: Date, default: Date.now },
+  status: { type: String, default: 'Released to Customer' }
+});
+
+const ReleaseHistory = mongoose.model('ReleaseHistory', ReleaseHistorySchema);
+
+// Create Release Record
+app.post('/api/releases', async (req, res) => {
+  try {
+    console.log('📋 Creating release record:', req.body);
+    
+    const releaseData = req.body;
+    const newRelease = new ReleaseHistory(releaseData);
+    const savedRelease = await newRelease.save();
+    
+    console.log('✅ Release record created:', savedRelease._id);
+    res.json({ 
+      success: true, 
+      message: 'Release record created successfully',
+      release: savedRelease 
+    });
+    
+  } catch (error) {
+    console.error('❌ Create release record error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get Release History
+app.get('/api/releases', async (req, res) => {
+  try {
+    console.log('📋 Fetching release history...');
+    
+    const releases = await ReleaseHistory.find().sort({ releasedAt: -1 });
+    
+    console.log(`✅ Found ${releases.length} release records`);
+    res.json({ success: true, data: releases });
+    
+  } catch (error) {
+    console.error('❌ Get release history error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ================== START SERVER ==================
 const PORT = process.env.PORT || 5000;
 
