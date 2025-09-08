@@ -1,9 +1,24 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
+const os = require('os');
 require('dotenv').config();
 
 console.log('🚀 Starting I-Track Mobile Backend Server...');
+
+// Get local IP address for network flexibility
+function getLocalIPAddress() {
+  const interfaces = os.networkInterfaces();
+  for (const name of Object.keys(interfaces)) {
+    for (const interface of interfaces[name]) {
+      // Skip over non-IPv4 and internal addresses
+      if (interface.family === 'IPv4' && !interface.internal) {
+        return interface.address;
+      }
+    }
+  }
+  return 'localhost'; // fallback
+}
 
 const app = express();
 
@@ -145,10 +160,7 @@ const InProgressRequestSchema = new mongoose.Schema({
 });
 const InProgressRequest = mongoose.model('InProgressRequest', InProgressRequestSchema);
 
-mongoose.connect(mongoURI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose.connect(mongoURI)
 .then(async () => {
   console.log('✅ Connected to MongoDB Atlas');
   
@@ -185,17 +197,42 @@ mongoose.connect(mongoURI, {
 
 // API Configuration endpoint
 app.get('/api/config', (req, res) => {
-  const baseUrl = process.env.NODE_ENV === 'production' 
-    ? 'https://itrack-backend.onrender.com' 
-    : 'http://192.168.254.147:5000';
+  const PORT = process.env.PORT || 5000;
+  const localIP = getLocalIPAddress();
+  
+  // Determine base URL based on environment
+  let baseUrl;
+  if (process.env.NODE_ENV === 'production') {
+    baseUrl = 'https://itrack-backend.onrender.com';
+  } else {
+    // Use the actual local IP address for better network flexibility
+    baseUrl = `http://${localIP}:${PORT}`;
+  }
+  
+  // Also provide alternative URLs for different network scenarios
+  const alternativeUrls = [
+    `http://localhost:${PORT}`,
+    `http://127.0.0.1:${PORT}`,
+    `http://${localIP}:${PORT}`,
+    `http://192.168.1.${localIP.split('.')[3]}:${PORT}`, // Common home network range
+    `http://192.168.0.${localIP.split('.')[3]}:${PORT}`, // Another common range
+  ];
     
   res.json({
     success: true,
     config: {
       backend: {
         BASE_URL: baseUrl,
+        LOCAL_IP: localIP,
+        PORT: PORT,
+        ALTERNATIVE_URLS: alternativeUrls,
         NAME: process.env.NODE_ENV === 'production' ? 'Production Backend' : 'Local Development Backend',
-        ENVIRONMENT: process.env.NODE_ENV || 'development'
+        ENVIRONMENT: process.env.NODE_ENV || 'development',
+        NETWORK_INFO: {
+          hostname: os.hostname(),
+          platform: os.platform(),
+          localIP: localIP
+        }
       },
       endpoints: {
         // Authentication
@@ -839,10 +876,23 @@ app.get('/api/releases', async (req, res) => {
 
 // ================== START SERVER ==================
 const PORT = process.env.PORT || 5000;
+const localIP = getLocalIPAddress();
 
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Mobile Backend Server running on port ${PORT}`);
-  console.log('📋 Available endpoints:');
+  console.log(`🌐 Network Information:`);
+  console.log(`   - Local IP: ${localIP}`);
+  console.log(`   - Local URL: http://${localIP}:${PORT}`);
+  console.log(`   - Localhost: http://localhost:${PORT}`);
+  console.log(`   - Hostname: ${os.hostname()}`);
+  console.log(`   - Platform: ${os.platform()}`);
+  console.log('');
+  console.log('� Mobile App Connection URLs:');
+  console.log(`   - Primary: http://${localIP}:${PORT}`);
+  console.log(`   - Fallback: http://localhost:${PORT}`);
+  console.log(`   - Alternative: http://127.0.0.1:${PORT}`);
+  console.log('');
+  console.log('�📋 Available endpoints:');
   console.log('  - POST /login');
   console.log('  - GET  /getUsers');
   console.log('  - POST /createUser');
@@ -863,10 +913,13 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('  - POST /api/dispatch/assignments');
   console.log('  - GET  /api/dispatch/assignments');
   console.log('  - PUT  /api/dispatch/assignments/:id/process');
+  console.log('  - POST /api/release/confirm');
+  console.log('  - GET  /api/release/history');
   console.log('  - GET  /api/config');
   console.log('  - GET  /test');
   console.log('  - GET  /health');
   console.log('✅ Ready for mobile app connections!');
+  console.log('💡 Tip: Use the Local IP for connecting from other devices on the same network');
 });
 
 // Error handling
