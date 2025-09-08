@@ -7,6 +7,32 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// API Configuration for I-Track Mobile App
+const API_CONFIG = {
+  // Development Mobile Backend (current)
+  MOBILE_BACKEND: {
+    BASE_URL: 'http://192.168.254.147:5000',
+    NAME: 'Mobile Development Backend'
+  },
+  
+  // Production Render Backend
+  RENDER_BACKEND: {
+    BASE_URL: 'https://itrack-backend-1.onrender.com',
+    NAME: 'Render Production Backend'
+  }
+};
+
+// Current active backend - Use local development backend
+const ACTIVE_BACKEND = API_CONFIG.MOBILE_BACKEND;
+
+// Helper function to build full API URL
+const buildApiUrl = (endpoint) => {
+  return `${ACTIVE_BACKEND.BASE_URL}${endpoint}`;
+};
+
+console.log(`📱 Mobile App connected to: ${ACTIVE_BACKEND.NAME}`);
+console.log(`🔗 Base URL: ${ACTIVE_BACKEND.BASE_URL}`);
+
 // MongoDB URI for your MongoDB Atlas cluster
 const mongoURI = 'mongodb+srv://itrack_user:itrack123@cluster0.py8s8pl.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0';
 
