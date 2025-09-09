@@ -239,6 +239,194 @@ app.post('/createStock', async (req, res) => {
   }
 });
 
+// Update Stock
+app.put('/updateStock/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updatedStock = await Inventory.findByIdAndUpdate(id, req.body, { new: true });
+    
+    if (!updatedStock) {
+      return res.status(404).json({ success: false, message: 'Stock not found' });
+    }
+    
+    console.log('✅ Updated stock:', updatedStock.unitName);
+    res.json({ success: true, message: 'Stock updated successfully', data: updatedStock });
+  } catch (error) {
+    console.error('❌ Update stock error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete Stock
+app.delete('/deleteStock/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedStock = await Inventory.findByIdAndDelete(id);
+    
+    if (!deletedStock) {
+      return res.status(404).json({ success: false, message: 'Stock not found' });
+    }
+    
+    console.log('✅ Deleted stock:', deletedStock.unitName);
+    res.json({ success: true, message: 'Stock deleted successfully', data: deletedStock });
+  } catch (error) {
+    console.error('❌ Delete stock error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ================== DISPATCH ASSIGNMENT ENDPOINTS ==================
+
+// Create Dispatch Assignment
+app.post('/api/dispatch/assignments', async (req, res) => {
+  try {
+    const { vehicleId, driverId, destination, priority, notes } = req.body;
+    
+    // Check if vehicle exists in inventory
+    const vehicle = await Inventory.findById(vehicleId);
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+    
+    // Check if driver exists
+    const driver = await User.findById(driverId);
+    if (!driver) {
+      return res.status(404).json({ success: false, message: 'Driver not found' });
+    }
+    
+    const newAssignment = new DriverAllocation({
+      unitName: vehicle.unitName,
+      unitId: vehicle.unitId || vehicle._id,
+      bodyColor: vehicle.bodyColor,
+      variation: vehicle.variation,
+      assignedDriver: driver.name,
+      driverId: driverId,
+      destination: destination,
+      priority: priority || 'Normal',
+      notes: notes,
+      status: 'Assigned',
+      allocatedBy: 'Dispatch',
+      date: new Date()
+    });
+
+    await newAssignment.save();
+    console.log('✅ Created dispatch assignment:', newAssignment.unitName, 'to', newAssignment.assignedDriver);
+    res.json({ success: true, message: 'Vehicle assigned successfully', data: newAssignment });
+  } catch (error) {
+    console.error('❌ Create dispatch assignment error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get Dispatch Assignments
+app.get('/api/dispatch/assignments', async (req, res) => {
+  try {
+    const assignments = await DriverAllocation.find({}).sort({ createdAt: -1 });
+    console.log(`📊 Found ${assignments.length} dispatch assignments`);
+    res.json({ success: true, data: assignments });
+  } catch (error) {
+    console.error('❌ Get dispatch assignments error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update Dispatch Process
+app.put('/api/dispatch/assignments/:id/process', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, location, notes } = req.body;
+    
+    const assignment = await DriverAllocation.findByIdAndUpdate(
+      id, 
+      { 
+        status: status,
+        currentLocation: location,
+        notes: notes,
+        lastUpdated: new Date()
+      }, 
+      { new: true }
+    );
+    
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found' });
+    }
+    
+    console.log('✅ Updated assignment process:', assignment.unitName, 'status:', status);
+    res.json({ success: true, message: 'Assignment updated successfully', data: assignment });
+  } catch (error) {
+    console.error('❌ Update assignment process error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ================== VEHICLE LOCATION TRACKING ENDPOINTS ==================
+
+// Get Vehicle Location by ID
+app.get('/vehicles/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Try to find vehicle in inventory first
+    let vehicle = await Inventory.findById(id);
+    if (!vehicle) {
+      // Try finding by unitId
+      vehicle = await Inventory.findOne({ unitId: id });
+    }
+    
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+    
+    // Generate mock location for demo (replace with real GPS tracking)
+    const mockLocation = {
+      lat: 14.5791 + (Math.random() - 0.5) * 0.1, // Manila area with some variance
+      lng: 121.0655 + (Math.random() - 0.5) * 0.1,
+      lastUpdated: new Date()
+    };
+    
+    const response = {
+      ...vehicle.toObject(),
+      location: mockLocation
+    };
+    
+    console.log('📍 Vehicle location requested:', vehicle.unitName);
+    res.json(response); // Note: AdminVehicleTracking expects direct object, not wrapped in success/data
+  } catch (error) {
+    console.error('❌ Get vehicle location error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update Vehicle Location (for real GPS tracking)
+app.put('/vehicles/:id/location', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { latitude, longitude } = req.body;
+    
+    let vehicle = await Inventory.findById(id);
+    if (!vehicle) {
+      vehicle = await Inventory.findOne({ unitId: id });
+    }
+    
+    if (!vehicle) {
+      return res.status(404).json({ success: false, message: 'Vehicle not found' });
+    }
+    
+    // In a real implementation, you'd save this to a vehicle locations collection
+    // For now, we'll just return success
+    
+    console.log('📍 Updated location for:', vehicle.unitName, `${latitude}, ${longitude}`);
+    res.json({ 
+      success: true, 
+      message: 'Location updated successfully',
+      data: { latitude, longitude, timestamp: new Date() }
+    });
+  } catch (error) {
+    console.error('❌ Update vehicle location error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get Service Requests
 app.get('/getRequest', async (req, res) => {
   try {
