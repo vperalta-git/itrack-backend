@@ -441,14 +441,15 @@ app.get('/api/config', (req, res) => {
 app.get('/api/mobile-config', (req, res) => {
   res.json({
     success: true,
-    serverUrl: 'https://itrack-backend.onrender.com',
+    serverUrl: 'https://itrack-backend-1.onrender.com',  // ✅ FIXED: NEW WORKING URL
     environment: 'production',
-    message: 'Always use Render for universal network access',
+    message: 'Always use NEW Render URL for universal network access',
     fallbacks: [
-      'https://itrack-backend.onrender.com',  // Primary
-      'http://192.168.254.147:5000',          // Local fallback 1
-      'http://10.97.63.190:5000',             // Local fallback 2
-      'http://localhost:5000'                 // Local development
+      'https://itrack-backend-1.onrender.com',  // ✅ NEW PRIMARY URL
+      'https://itrack-backend.onrender.com',    // Old URL as fallback
+      'http://192.168.254.147:5000',            // Local fallback 1
+      'http://10.97.63.190:5000',               // Local fallback 2
+      'http://localhost:5000'                   // Local development
     ],
     timestamp: new Date().toISOString()
   });
