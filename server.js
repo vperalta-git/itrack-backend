@@ -280,7 +280,7 @@ app.delete('/deleteStock/:id', async (req, res) => {
 // Create Dispatch Assignment
 app.post('/api/dispatch/assignments', async (req, res) => {
   try {
-    const { vehicleId, driverId, destination, priority, notes } = req.body;
+    const { vehicleId, unitName, unitId, bodyColor, variation, processes, status, assignedBy, priority, notes } = req.body;
     
     // Check if vehicle exists in inventory
     const vehicle = await Inventory.findById(vehicleId);
@@ -288,30 +288,22 @@ app.post('/api/dispatch/assignments', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Vehicle not found' });
     }
     
-    // Check if driver exists
-    const driver = await User.findById(driverId);
-    if (!driver) {
-      return res.status(404).json({ success: false, message: 'Driver not found' });
-    }
-    
     const newAssignment = new DriverAllocation({
-      unitName: vehicle.unitName,
-      unitId: vehicle.unitId || vehicle._id,
-      bodyColor: vehicle.bodyColor,
-      variation: vehicle.variation,
-      assignedDriver: driver.name,
-      driverId: driverId,
-      destination: destination,
+      unitName: unitName || vehicle.unitName,
+      unitId: unitId || vehicle.unitId || vehicle._id,
+      bodyColor: bodyColor || vehicle.bodyColor,
+      variation: variation || vehicle.variation,
+      processes: processes || [],
+      status: status || 'Assigned to Dispatch',
       priority: priority || 'Normal',
       notes: notes,
-      status: 'Assigned',
-      allocatedBy: 'Dispatch',
+      assignedBy: assignedBy || 'Admin',
       date: new Date()
     });
 
     await newAssignment.save();
-    console.log('✅ Created dispatch assignment:', newAssignment.unitName, 'to', newAssignment.assignedDriver);
-    res.json({ success: true, message: 'Vehicle assigned successfully', data: newAssignment });
+    console.log('✅ Created dispatch assignment:', newAssignment.unitName, 'with processes:', newAssignment.processes);
+    res.json({ success: true, message: 'Vehicle assigned to dispatch successfully', data: newAssignment });
   } catch (error) {
     console.error('❌ Create dispatch assignment error:', error);
     res.status(500).json({ success: false, error: error.message });
