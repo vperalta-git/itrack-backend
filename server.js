@@ -168,6 +168,97 @@ app.get('/getUsers', async (req, res) => {
   }
 });
 
+// Create User
+app.post('/createUser', async (req, res) => {
+  try {
+    const { username, password, role, name, email, phone, assignedTo } = req.body;
+    
+    // Validate required fields
+    if (!username || !password || !role) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Username, password, and role are required' 
+      });
+    }
+    
+    // Check if user already exists
+    const existingUser = await User.findOne({ username: username.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Username already exists' 
+      });
+    }
+    
+    const newUser = new User({
+      username: username.toLowerCase(),
+      password: password, // In production, this should be hashed
+      role: role,
+      name: name || username,
+      email: email || '',
+      phone: phone || '',
+      assignedTo: assignedTo || null,
+      accountName: name || username,
+      date: new Date()
+    });
+    
+    await newUser.save();
+    
+    // Return user without password
+    const userResponse = { ...newUser.toObject() };
+    delete userResponse.password;
+    
+    console.log('✅ Created user:', username, 'with role:', role);
+    res.json({ success: true, message: 'User created successfully', data: userResponse });
+  } catch (error) {
+    console.error('❌ Create user error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update User
+app.put('/updateUser/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = { ...req.body };
+    
+    // Remove password from update data if empty
+    if (!updateData.password) {
+      delete updateData.password;
+    }
+    
+    const updatedUser = await User.findByIdAndUpdate(id, updateData, { new: true }).select('-password');
+    
+    if (!updatedUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    console.log('✅ Updated user:', updatedUser.username);
+    res.json({ success: true, message: 'User updated successfully', data: updatedUser });
+  } catch (error) {
+    console.error('❌ Update user error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete User
+app.delete('/deleteUser/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const deletedUser = await User.findByIdAndDelete(id);
+    
+    if (!deletedUser) {
+      return res.status(404).json({ success: false, message: 'User not found' });
+    }
+    
+    console.log('✅ Deleted user:', deletedUser.username);
+    res.json({ success: true, message: 'User deleted successfully', data: deletedUser });
+  } catch (error) {
+    console.error('❌ Delete user error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Get Driver Allocations
 app.get('/getAllocation', async (req, res) => {
   try {
@@ -239,186 +330,6 @@ app.post('/createStock', async (req, res) => {
   }
 });
 
-// Update Stock
-app.put('/updateStock/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updatedStock = await Inventory.findByIdAndUpdate(id, req.body, { new: true });
-    
-    if (!updatedStock) {
-      return res.status(404).json({ success: false, message: 'Stock not found' });
-    }
-    
-    console.log('✅ Updated stock:', updatedStock.unitName);
-    res.json({ success: true, message: 'Stock updated successfully', data: updatedStock });
-  } catch (error) {
-    console.error('❌ Update stock error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Delete Stock
-app.delete('/deleteStock/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const deletedStock = await Inventory.findByIdAndDelete(id);
-    
-    if (!deletedStock) {
-      return res.status(404).json({ success: false, message: 'Stock not found' });
-    }
-    
-    console.log('✅ Deleted stock:', deletedStock.unitName);
-    res.json({ success: true, message: 'Stock deleted successfully', data: deletedStock });
-  } catch (error) {
-    console.error('❌ Delete stock error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ================== DISPATCH ASSIGNMENT ENDPOINTS ==================
-
-// Create Dispatch Assignment
-app.post('/api/dispatch/assignments', async (req, res) => {
-  try {
-    const { vehicleId, unitName, unitId, bodyColor, variation, processes, status, assignedBy, priority, notes } = req.body;
-    
-    // Check if vehicle exists in inventory
-    const vehicle = await Inventory.findById(vehicleId);
-    if (!vehicle) {
-      return res.status(404).json({ success: false, message: 'Vehicle not found' });
-    }
-    
-    const newAssignment = new DriverAllocation({
-      unitName: unitName || vehicle.unitName,
-      unitId: unitId || vehicle.unitId || vehicle._id,
-      bodyColor: bodyColor || vehicle.bodyColor,
-      variation: variation || vehicle.variation,
-      processes: processes || [],
-      status: status || 'Assigned to Dispatch',
-      priority: priority || 'Normal',
-      notes: notes,
-      assignedBy: assignedBy || 'Admin',
-      date: new Date()
-    });
-
-    await newAssignment.save();
-    console.log('✅ Created dispatch assignment:', newAssignment.unitName, 'with processes:', newAssignment.processes);
-    res.json({ success: true, message: 'Vehicle assigned to dispatch successfully', data: newAssignment });
-  } catch (error) {
-    console.error('❌ Create dispatch assignment error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Get Dispatch Assignments
-app.get('/api/dispatch/assignments', async (req, res) => {
-  try {
-    const assignments = await DriverAllocation.find({}).sort({ createdAt: -1 });
-    console.log(`📊 Found ${assignments.length} dispatch assignments`);
-    res.json({ success: true, data: assignments });
-  } catch (error) {
-    console.error('❌ Get dispatch assignments error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Update Dispatch Process
-app.put('/api/dispatch/assignments/:id/process', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status, location, notes } = req.body;
-    
-    const assignment = await DriverAllocation.findByIdAndUpdate(
-      id, 
-      { 
-        status: status,
-        currentLocation: location,
-        notes: notes,
-        lastUpdated: new Date()
-      }, 
-      { new: true }
-    );
-    
-    if (!assignment) {
-      return res.status(404).json({ success: false, message: 'Assignment not found' });
-    }
-    
-    console.log('✅ Updated assignment process:', assignment.unitName, 'status:', status);
-    res.json({ success: true, message: 'Assignment updated successfully', data: assignment });
-  } catch (error) {
-    console.error('❌ Update assignment process error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// ================== VEHICLE LOCATION TRACKING ENDPOINTS ==================
-
-// Get Vehicle Location by ID
-app.get('/vehicles/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Try to find vehicle in inventory first
-    let vehicle = await Inventory.findById(id);
-    if (!vehicle) {
-      // Try finding by unitId
-      vehicle = await Inventory.findOne({ unitId: id });
-    }
-    
-    if (!vehicle) {
-      return res.status(404).json({ success: false, message: 'Vehicle not found' });
-    }
-    
-    // Generate mock location for demo (replace with real GPS tracking)
-    const mockLocation = {
-      lat: 14.5791 + (Math.random() - 0.5) * 0.1, // Manila area with some variance
-      lng: 121.0655 + (Math.random() - 0.5) * 0.1,
-      lastUpdated: new Date()
-    };
-    
-    const response = {
-      ...vehicle.toObject(),
-      location: mockLocation
-    };
-    
-    console.log('📍 Vehicle location requested:', vehicle.unitName);
-    res.json(response); // Note: AdminVehicleTracking expects direct object, not wrapped in success/data
-  } catch (error) {
-    console.error('❌ Get vehicle location error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Update Vehicle Location (for real GPS tracking)
-app.put('/vehicles/:id/location', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { latitude, longitude } = req.body;
-    
-    let vehicle = await Inventory.findById(id);
-    if (!vehicle) {
-      vehicle = await Inventory.findOne({ unitId: id });
-    }
-    
-    if (!vehicle) {
-      return res.status(404).json({ success: false, message: 'Vehicle not found' });
-    }
-    
-    // In a real implementation, you'd save this to a vehicle locations collection
-    // For now, we'll just return success
-    
-    console.log('📍 Updated location for:', vehicle.unitName, `${latitude}, ${longitude}`);
-    res.json({ 
-      success: true, 
-      message: 'Location updated successfully',
-      data: { latitude, longitude, timestamp: new Date() }
-    });
-  } catch (error) {
-    console.error('❌ Update vehicle location error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
 // Get Service Requests
 app.get('/getRequest', async (req, res) => {
   try {
@@ -476,30 +387,20 @@ app.get('/test', (req, res) => {
   res.json({ success: true, message: 'Mobile backend server is running!' });
 });
 
-// Root endpoint to identify the service - MUST BE I-TRACK BACKEND
+// Root endpoint to identify the service
 app.get('/', (req, res) => {
   res.json({ 
-    service: 'I-TRACK-MOBILE-BACKEND-API-v2.0',
-    application: 'I-Track Vehicle Tracking System',
-    type: 'Node.js Express API Server',
+    service: 'I-Track Mobile Backend API',
     version: '2.0.0',
-    status: 'ACTIVE',
-    deployment: 'render-nodejs-fixed',
-    repository: 'vperalta-git/itrack-backend',
-    api_endpoints: {
+    status: 'active',
+    deployment: 'render-nodejs',
+    endpoints: {
       health: '/health',
       config: '/api/config',
       mobile_config: '/api/mobile-config',
-      test: '/test',
-      login: '/login',
-      vehicles: '/getAllocation',
-      inventory: '/getStock',
-      users: '/getUsers'
+      test: '/test'
     },
-    database: 'MongoDB Atlas Connected',
-    maps: 'OpenStreetMap Integration',
-    timestamp: new Date().toISOString(),
-    message: 'This is the I-Track Mobile Backend API - NOT a React app!'
+    timestamp: new Date().toISOString()
   });
 });
 
@@ -507,13 +408,9 @@ app.get('/', (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
-    service: 'I-TRACK-BACKEND-NODEJS-API',
-    application: 'I-Track Vehicle Tracking',
+    service: 'itrack-backend-nodejs',
     version: '2.0.0',
-    deployment: 'render-nodejs-verified',
-    server_type: 'Node.js Express API (NOT React HTML)',
-    database_status: 'MongoDB Atlas Connected',
-    api_ready: true,
+    deployment: 'render-fixed',
     timestamp: new Date().toISOString() 
   });
 });
@@ -621,15 +518,14 @@ app.get('/api/config', (req, res) => {
 app.get('/api/mobile-config', (req, res) => {
   res.json({
     success: true,
-    serverUrl: 'https://itrack-backend-1.onrender.com',  // ✅ FIXED: NEW WORKING URL
+    serverUrl: 'https://itrack-backend.onrender.com',
     environment: 'production',
-    message: 'Always use NEW Render URL for universal network access',
+    message: 'Always use Render for universal network access',
     fallbacks: [
-      'https://itrack-backend-1.onrender.com',  // ✅ NEW PRIMARY URL
-      'https://itrack-backend.onrender.com',    // Old URL as fallback
-      'http://192.168.254.147:5000',            // Local fallback 1
-      'http://10.97.63.190:5000',               // Local fallback 2
-      'http://localhost:5000'                   // Local development
+      'https://itrack-backend.onrender.com',  // Primary
+      'http://192.168.254.147:5000',          // Local fallback 1
+      'http://10.97.63.190:5000',             // Local fallback 2
+      'http://localhost:5000'                 // Local development
     ],
     timestamp: new Date().toISOString()
   });
