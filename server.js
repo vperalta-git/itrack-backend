@@ -296,9 +296,32 @@ app.get('/test', (req, res) => {
   res.json({ success: true, message: 'Mobile backend server is running!' });
 });
 
-// Health check
+// Root endpoint to identify the service
+app.get('/', (req, res) => {
+  res.json({ 
+    service: 'I-Track Mobile Backend API',
+    version: '2.0.0',
+    status: 'active',
+    deployment: 'render-nodejs',
+    endpoints: {
+      health: '/health',
+      config: '/api/config',
+      mobile_config: '/api/mobile-config',
+      test: '/test'
+    },
+    timestamp: new Date().toISOString()
+  });
+});
+
+// Health check  
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: new Date().toISOString() });
+  res.json({ 
+    status: 'OK', 
+    service: 'itrack-backend-nodejs',
+    version: '2.0.0',
+    deployment: 'render-fixed',
+    timestamp: new Date().toISOString() 
+  });
 });
 
 // API Configuration endpoint - provides dynamic server URLs for mobile app
