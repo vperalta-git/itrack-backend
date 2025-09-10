@@ -531,6 +531,235 @@ app.get('/api/mobile-config', (req, res) => {
   });
 });
 
+// ================== DISPATCH ASSIGNMENT ENDPOINTS ==================
+
+// Dispatch Assignment Schema
+const dispatchAssignmentSchema = new mongoose.Schema({
+  vehicleId: { type: String, required: true },
+  unitName: { type: String, required: true },
+  unitId: { type: String, required: true },
+  bodyColor: { type: String, required: true },
+  variation: { type: String, required: true },
+  processes: [{ type: String, required: true }],
+  status: { type: String, default: 'Assigned to Dispatch' },
+  assignedBy: { type: String, required: true },
+  assignedAt: { type: Date, default: Date.now },
+  completedProcesses: [{ type: String, default: [] }],
+  completedAt: { type: Date },
+  completedBy: { type: String }
+}, { timestamps: true });
+
+const DispatchAssignment = mongoose.model('DispatchAssignment', dispatchAssignmentSchema);
+
+// GET /api/dispatch/assignments - Fetch all dispatch assignments
+app.get('/api/dispatch/assignments', async (req, res) => {
+  try {
+    console.log('📋 Fetching dispatch assignments...');
+    
+    const assignments = await DispatchAssignment.find().sort({ createdAt: -1 });
+    
+    console.log(`✅ Found ${assignments.length} dispatch assignments`);
+    
+    res.json({
+      success: true,
+      data: assignments,
+      count: assignments.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching dispatch assignments:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch dispatch assignments',
+      details: error.message
+    });
+  }
+});
+
+// POST /api/dispatch/assignments - Create new dispatch assignment
+app.post('/api/dispatch/assignments', async (req, res) => {
+  try {
+    console.log('📋 Creating dispatch assignment:', req.body);
+    
+    const { vehicleId, unitName, unitId, bodyColor, variation, processes, assignedBy } = req.body;
+    
+    // Validate required fields
+    if (!vehicleId || !unitName || !unitId || !processes || !assignedBy) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: vehicleId, unitName, unitId, processes, assignedBy'
+      });
+    }
+
+    // Check if assignment already exists for this vehicle
+    const existingAssignment = await DispatchAssignment.findOne({ vehicleId });
+    if (existingAssignment) {
+      return res.status(400).json({
+        success: false,
+        error: 'Vehicle already assigned to dispatch'
+      });
+    }
+
+    // Create new dispatch assignment
+    const newAssignment = new DispatchAssignment({
+      vehicleId,
+      unitName,
+      unitId,
+      bodyColor,
+      variation,
+      processes: Array.isArray(processes) ? processes : [processes],
+      assignedBy,
+      status: 'Assigned to Dispatch'
+    });
+
+    const savedAssignment = await newAssignment.save();
+    
+    console.log('✅ Dispatch assignment created:', savedAssignment);
+    
+    res.status(201).json({
+      success: true,
+      data: savedAssignment,
+      message: 'Vehicle successfully assigned to dispatch'
+    });
+    
+  } catch (error) {
+    console.error('❌ Error creating dispatch assignment:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to create dispatch assignment',
+      details: error.message
+    });
+  }
+});
+
+// PUT /api/dispatch/assignments/:id/process - Update process completion
+app.put('/api/dispatch/assignments/:id/process', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { processName, completedBy } = req.body;
+    
+    console.log(`📋 Updating process ${processName} for assignment ${id}`);
+    
+    const assignment = await DispatchAssignment.findById(id);
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Dispatch assignment not found'
+      });
+    }
+
+    // Add process to completed list if not already there
+    if (!assignment.completedProcesses.includes(processName)) {
+      assignment.completedProcesses.push(processName);
+    }
+
+    // Check if all processes are completed
+    const allProcessesCompleted = assignment.processes.every(process => 
+      assignment.completedProcesses.includes(process)
+    );
+
+    if (allProcessesCompleted) {
+      assignment.status = 'Ready for Release';
+      assignment.completedAt = new Date();
+      assignment.completedBy = completedBy;
+    } else {
+      assignment.status = 'In Progress';
+    }
+
+    const updatedAssignment = await assignment.save();
+    
+    console.log('✅ Process updated:', updatedAssignment);
+    
+    res.json({
+      success: true,
+      data: updatedAssignment,
+      message: `Process ${processName} completed successfully`
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating process:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update process',
+      details: error.message
+    });
+  }
+});
+
+// PUT /api/dispatch/assignments/:id - Update dispatch assignment status
+app.put('/api/dispatch/assignments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, completedBy } = req.body;
+    
+    console.log(`📋 Updating assignment ${id} status to ${status}`);
+    
+    const assignment = await DispatchAssignment.findById(id);
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Dispatch assignment not found'
+      });
+    }
+
+    assignment.status = status;
+    if (status === 'Released' || status === 'Completed') {
+      assignment.completedAt = new Date();
+      assignment.completedBy = completedBy;
+    }
+
+    const updatedAssignment = await assignment.save();
+    
+    console.log('✅ Assignment status updated:', updatedAssignment);
+    
+    res.json({
+      success: true,
+      data: updatedAssignment,
+      message: `Assignment status updated to ${status}`
+    });
+    
+  } catch (error) {
+    console.error('❌ Error updating assignment status:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update assignment status',
+      details: error.message
+    });
+  }
+});
+
+// DELETE /api/dispatch/assignments/:id - Delete dispatch assignment
+app.delete('/api/dispatch/assignments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log(`📋 Deleting dispatch assignment ${id}`);
+    
+    const deletedAssignment = await DispatchAssignment.findByIdAndDelete(id);
+    if (!deletedAssignment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Dispatch assignment not found'
+      });
+    }
+    
+    console.log('✅ Dispatch assignment deleted:', deletedAssignment);
+    
+    res.json({
+      success: true,
+      data: deletedAssignment,
+      message: 'Dispatch assignment deleted successfully'
+    });
+    
+  } catch (error) {
+    console.error('❌ Error deleting dispatch assignment:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to delete dispatch assignment',
+      details: error.message
+    });
+  }
+});
+
 // ================== MAPS & GEOCODING ENDPOINTS (OpenStreetMap) ==================
 
 // Geocoding: Convert address to coordinates
@@ -783,6 +1012,11 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('  - GET  /getRequest');
   console.log('  - GET  /getCompletedRequests');
   console.log('  - GET  /dashboard/stats');
+  console.log('  - GET  /api/dispatch/assignments');
+  console.log('  - POST /api/dispatch/assignments');
+  console.log('  - PUT  /api/dispatch/assignments/:id/process');
+  console.log('  - PUT  /api/dispatch/assignments/:id');
+  console.log('  - DELETE /api/dispatch/assignments/:id');
   console.log('  - GET  /test');
   console.log('  - GET  /health');
   console.log('');
