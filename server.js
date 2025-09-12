@@ -439,24 +439,24 @@ app.get('/api/config', (req, res) => {
       platform: os.platform()
     },
     apiUrls: {
-      production: 'https://itrack-backend.onrender.com',
+      production: 'https://itrack-backend-1.onrender.com',
       development: localIPs.map(ip => `http://${ip}:${port}`).concat([
         `http://localhost:${port}`,
         `http://127.0.0.1:${port}`
       ]),
       // ALWAYS prioritize Render for mobile app universal access
-      recommended: 'https://itrack-backend.onrender.com',
+      recommended: 'https://itrack-backend-1.onrender.com',
       // Priority order for mobile app discovery
       priority: [
-        'https://itrack-backend.onrender.com',  // 🥇 Always try Render first
-        `http://${primaryIP}:${port}`,          // 🥈 Local network fallback
-        `http://localhost:${port}`,             // 🥉 Local development fallback
+        'https://itrack-backend-1.onrender.com',  // 🥇 Always try Render first
+        `http://${primaryIP}:${port}`,            // 🥈 Local network fallback
+        `http://localhost:${port}`,               // 🥉 Local development fallback
         ...localIPs.map(ip => `http://${ip}:${port}`)
       ]
     },
     mobileAppConfig: {
       alwaysUseRender: true,
-      renderUrl: 'https://itrack-backend.onrender.com',
+      renderUrl: 'https://itrack-backend-1.onrender.com',
       fallbackUrls: localIPs.map(ip => `http://${ip}:${port}`).concat([
         `http://localhost:${port}`,
         `http://127.0.0.1:${port}`,
