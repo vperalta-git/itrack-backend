@@ -1,10 +1,13 @@
 # Google Maps API Setup for I-Track Backend
 
 ## Overview
+
 The I-Track backend now uses Google Maps API for all mapping services instead of OpenStreetMap. This provides better reliability, accuracy, and performance for your mobile app.
 
 ## Required APIs
+
 Your Google Cloud project needs these APIs enabled:
+
 1. **Geocoding API** - Convert addresses to coordinates
 2. **Directions API** - Get route directions between points
 3. **Places API** - Find nearby places and points of interest
@@ -16,7 +19,7 @@ Your Google Cloud project needs these APIs enabled:
 2. Create a new project or select existing one
 3. Enable the following APIs:
    - Geocoding API
-   - Directions API 
+   - Directions API
    - Places API
    - Maps JavaScript API
 4. Go to "Credentials" and create an API Key
@@ -37,6 +40,7 @@ Your Google Cloud project needs these APIs enabled:
 ## Step 3: Test the Integration
 
 After deployment, test these endpoints:
+
 - `https://itrack-backend-1.onrender.com/api/maps/geocode?address=Manila,Philippines`
 - `https://itrack-backend-1.onrender.com/api/maps/reverse-geocode?lat=14.5995&lon=120.9842`
 - `https://itrack-backend-1.onrender.com/api/maps/directions?start_lat=14.5995&start_lon=120.9842&end_lat=14.6042&end_lon=121.0222`
@@ -59,15 +63,18 @@ After deployment, test these endpoints:
 ## Troubleshooting
 
 **If you see "API key not configured":**
+
 - Make sure you added `GOOGLE_MAPS_API_KEY` to Render environment variables
 - Redeploy the service after adding the environment variable
 
 **If you see "API key invalid":**
+
 - Check that your API key is correct
 - Verify the required APIs are enabled in Google Cloud Console
 - Make sure API restrictions allow the APIs you're using
 
 **If requests fail:**
+
 - Check your Google Cloud Console for API quota/billing issues
 - Verify your API key restrictions aren't too restrictive
 
