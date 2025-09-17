@@ -2,9 +2,31 @@ const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
 const os = require('os');
+const session = require('express-session');
+const MongoStore = require('connect-mongo');
 require('dotenv').config();
 
 console.log('🚀 Starting I-Track Mobile Backend Server...');
+
+// Environment variable validation
+console.log('🔧 Environment Configuration:');
+console.log('   - NODE_ENV:', process.env.NODE_ENV || 'development');
+console.log('   - PORT:', process.env.PORT || '5000');
+console.log('   - MONGODB_URI:', process.env.MONGODB_URI ? '✅ Set' : '⚠️  Using default');
+console.log('   - SESSION_SECRET:', process.env.SESSION_SECRET ? '✅ Set' : '⚠️  Using default');
+console.log('   - GMAIL_USER:', process.env.GMAIL_USER ? '✅ Set' : '❌ Missing (required for email)');
+console.log('   - GMAIL_APP_PASSWORD:', process.env.GMAIL_APP_PASSWORD ? '✅ Set' : '❌ Missing (required for email)');
+
+// Validate critical environment variables for email functionality
+if (!process.env.GMAIL_USER || !process.env.GMAIL_APP_PASSWORD) {
+  console.log('');
+  console.log('⚠️  EMAIL CONFIGURATION WARNING:');
+  console.log('   Gmail credentials not found. Email features will be disabled.');
+  console.log('   To enable email features, add to your .env file:');
+  console.log('   GMAIL_USER=your-email@gmail.com');
+  console.log('   GMAIL_APP_PASSWORD=your-16-character-app-password');
+  console.log('');
+}
 
 // Get local IP addresses for network flexibility
 function getLocalIPAddresses() {
@@ -35,6 +57,22 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Session configuration
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'itrack-session-secret-key-2024',
+  resave: false,
+  saveUninitialized: false,
+  store: MongoStore.create({
+    mongoUrl: mongoURI,
+    touchAfter: 24 * 3600 // lazy session update
+  }),
+  cookie: {
+    secure: process.env.NODE_ENV === 'production', // HTTPS in production
+    httpOnly: true,
+    maxAge: 1000 * 60 * 60 * 24 * 7 // 1 week
+  }
+}));
+
 // MongoDB connection
 const mongoURI = process.env.MONGODB_URI || 
   'mongodb+srv://itrack_user:itrack123@cluster0.py8s8pl.mongodb.net/itrackDB?retryWrites=true&w=majority&appName=Cluster0';
@@ -50,16 +88,16 @@ mongoose.connect(mongoURI, {
 const userRoutes = require('./routes/userRoutes');
 app.use('/api', userRoutes);
 
-// ================== SCHEMAS (Original Working Versions) ==================
+// ================== AUTH ROUTES (Password Management) ==================
+const authRoutes = require('./routes/authRoutes');
+app.use('/api/auth', authRoutes);
 
-// User Schema
-const UserSchema = new mongoose.Schema({
-  username: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  role: { type: String, required: true },
-  accountName: { type: String, required: true },
-  assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-});
+// ================== TEST DRIVE BOOKING ROUTES ==================
+const testDriveRoutes = require('./routes/testDriveRoutes');
+app.use('/api/testdrive', testDriveRoutes);
+
+// Import enhanced User model instead of defining duplicate schema
+const User = require('./models/User');
 
 // Driver Allocation Schema
 const DriverAllocationSchema = new mongoose.Schema({
@@ -116,16 +154,16 @@ const CompletedRequestSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // ================== MODELS ==================
-const User = mongoose.model('User', UserSchema);
+// User model imported from enhanced schema above
 const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema);
 const Inventory = mongoose.model('Inventory', InventorySchema);
 const VehicleStock = mongoose.model('VehicleStock', VehicleStockSchema);
 const ServiceRequest = mongoose.model('ServiceRequest', ServiceRequestSchema);
 const CompletedRequest = mongoose.model('CompletedRequest', CompletedRequestSchema);
 
-// ================== MOBILE APP ROUTES (Original Working) ==================
+// ================== MOBILE APP ROUTES (Enhanced with Password Management) ==================
 
-// Login endpoint
+// Login endpoint - Enhanced to support temporary passwords
 app.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
@@ -135,25 +173,79 @@ app.post('/login', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Username and password required' });
     }
 
-    const user = await User.findOne({ username: username.toLowerCase() });
+    // Find user by username (case insensitive) or accountName
+    const user = await User.findOne({ 
+      $or: [
+        { username: username.toLowerCase() },
+        { accountName: username }
+      ]
+    });
+    
     if (!user) {
       return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
-    if (user.password !== password) {
-      return res.status(401).json({ success: false, message: 'Invalid password' });
+    let isValidLogin = false;
+    let isTemporaryPassword = false;
+
+    // Check if using temporary password
+    if (user.temporaryPassword && 
+        user.temporaryPasswordExpires && 
+        user.temporaryPasswordExpires > Date.now()) {
+      
+      if (password === user.temporaryPassword) {
+        isValidLogin = true;
+        isTemporaryPassword = true;
+        
+        console.log('🔑 User logged in with temporary password:', username);
+        
+        // Clear temporary password after successful use
+        user.temporaryPassword = undefined;
+        user.temporaryPasswordExpires = undefined;
+        await user.save();
+      }
     }
 
-    res.json({
+    // If not using temporary password, check regular password
+    if (!isValidLogin && user.password === password) {
+      isValidLogin = true;
+      console.log('🔑 User logged in with regular password:', username);
+    }
+
+    if (!isValidLogin) {
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
+    }
+
+    // Update last login
+    user.lastLogin = new Date();
+    await user.save();
+
+    // Create session
+    const sessionUser = {
+      id: user._id,
+      username: user.username,
+      accountName: user.accountName,
+      email: user.email,
+      role: user.role,
+      assignedTo: user.assignedTo
+    };
+
+    req.session.user = sessionUser;
+
+    const response = {
       success: true,
       message: 'Login successful',
-      user: {
-        username: user.username,
-        role: user.role,
-        accountName: user.accountName,
-        assignedTo: user.assignedTo
-      }
-    });
+      user: sessionUser
+    };
+
+    // If temporary password was used, notify frontend to prompt password change
+    if (isTemporaryPassword) {
+      response.requirePasswordChange = true;
+      response.message = 'Login successful with temporary password. Please change your password immediately.';
+      console.log('⚠️  User should change password immediately:', username);
+    }
+
+    res.json(response);
   } catch (error) {
     console.error('❌ Login error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
