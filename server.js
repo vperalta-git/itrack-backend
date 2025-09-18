@@ -53,6 +53,17 @@ function getPrimaryIPAddress() {
 
 const app = express();
 
+// MongoDB connection
+const mongoURI = process.env.MONGODB_URI || 
+  'mongodb+srv://itrack_user:' + (process.env.MONGODB_PASSWORD || 'fallback_password') + '@cluster0.py8s8pl.mongodb.net/itrackDB?retryWrites=true&w=majority&appName=Cluster0';
+
+mongoose.connect(mongoURI, {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
+})
+.then(() => console.log('✅ Connected to MongoDB Atlas'))
+.catch(err => console.error('❌ MongoDB connection error:', err));
+
 // Enable CORS for all origins
 app.use(cors());
 app.use(express.json());
@@ -73,17 +84,6 @@ app.use(session({
   }
 }));
 
-// MongoDB connection
-const mongoURI = process.env.MONGODB_URI || 
-  'mongodb+srv://itrack_user:itrack123@cluster0.py8s8pl.mongodb.net/itrackDB?retryWrites=true&w=majority&appName=Cluster0';
-
-mongoose.connect(mongoURI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
-.then(() => console.log('✅ Connected to MongoDB Atlas'))
-.catch(err => console.error('❌ MongoDB connection error:', err));
-
 // ================== ENHANCED USER ROUTES ==================
 const userRoutes = require('./routes/userRoutes');
 app.use('/api', userRoutes);
@@ -96,70 +96,19 @@ app.use('/api/auth', authRoutes);
 const testDriveRoutes = require('./routes/testDriveRoutes');
 app.use('/api/testdrive', testDriveRoutes);
 
+// ================== ALLOCATION & INVENTORY ROUTES ==================
+const allocationRoutes = require('./routes/allocationRoutes');
+app.use('/api', allocationRoutes);
+
 // Import enhanced User model instead of defining duplicate schema
 const User = require('./models/User');
 
-// Driver Allocation Schema
-const DriverAllocationSchema = new mongoose.Schema({
-  unitName: String,
-  conductionNumber: String, 
-  unitId: String,
-  bodyColor: String,
-  variation: String,
-  assignedDriver: String,
-  status: String,
-  date: { type: Date, default: Date.now },
-  allocatedBy: String,
-}, { timestamps: true });
-
-// Inventory Schema  
-const InventorySchema = new mongoose.Schema({
-  unitName: String,
-  unitId: String,
-  bodyColor: String,
-  variation: String,
-  quantity: { type: Number, default: 1 },
-}, { timestamps: true });
-
-// Vehicle Stock Schema
-const VehicleStockSchema = new mongoose.Schema({
-  unitName: String,
-  bodyColor: String,
-  variation: String,
-  unitId: String,
-}, { timestamps: true });
-
-// Service Request Schema
-const ServiceRequestSchema = new mongoose.Schema({
-  dateCreated: Date,
-  vehicleRegNo: String,
-  service: Array,
-  status: String,
-  inProgressAt: Date,
-  completedAt: Date,
-  serviceDurationMinutes: Number,
-  preparedBy: String,
-}, { timestamps: true });
-
-// Completed Request Schema
-const CompletedRequestSchema = new mongoose.Schema({
-  dateCreated: Date,
-  vehicleRegNo: String,
-  service: Array,
-  status: String,
-  inProgressAt: Date,
-  completedAt: Date,
-  serviceDurationMinutes: Number,
-  preparedBy: String,
-}, { timestamps: true });
-
-// ================== MODELS ==================
-// User model imported from enhanced schema above
-const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema);
-const Inventory = mongoose.model('Inventory', InventorySchema);
-const VehicleStock = mongoose.model('VehicleStock', VehicleStockSchema);
-const ServiceRequest = mongoose.model('ServiceRequest', ServiceRequestSchema);
-const CompletedRequest = mongoose.model('CompletedRequest', CompletedRequestSchema);
+// Import other models
+const DriverAllocation = require('./models/DriverAllocation');
+const Inventory = require('./models/Inventory');
+const Servicerequest = require('./models/Servicerequest');
+const CompletedRequest = require('./models/CompletedRequest');
+const InProgressRequest = require('./models/InProgressRequest');
 
 // ================== MOBILE APP ROUTES (Enhanced with Password Management) ==================
 
@@ -351,77 +300,6 @@ app.delete('/deleteUser/:id', async (req, res) => {
     res.json({ success: true, message: 'User deleted successfully', data: deletedUser });
   } catch (error) {
     console.error('❌ Delete user error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Get Driver Allocations
-app.get('/getAllocation', async (req, res) => {
-  try {
-    const allocations = await DriverAllocation.find({}).sort({ createdAt: -1 });
-    console.log(`📊 Found ${allocations.length} allocations`);
-    res.json({ success: true, data: allocations });
-  } catch (error) {
-    console.error('❌ Get allocations error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Create Driver Allocation
-app.post('/createAllocation', async (req, res) => {
-  try {
-    const { unitName, unitId, bodyColor, variation, assignedDriver, status, allocatedBy } = req.body;
-    
-    const newAllocation = new DriverAllocation({
-      unitName,
-      unitId,
-      bodyColor,
-      variation,
-      assignedDriver,
-      status: status || 'Pending',
-      allocatedBy: allocatedBy || 'Admin',
-      date: new Date()
-    });
-
-    await newAllocation.save();
-    console.log('✅ Created allocation:', newAllocation.unitName);
-    res.json({ success: true, message: 'Allocation created successfully', data: newAllocation });
-  } catch (error) {
-    console.error('❌ Create allocation error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Get Stock/Inventory
-app.get('/getStock', async (req, res) => {
-  try {
-    const inventory = await Inventory.find({}).sort({ createdAt: -1 });
-    console.log(`📊 Found ${inventory.length} inventory items`);
-    res.json({ success: true, data: inventory });
-  } catch (error) {
-    console.error('❌ Get stock error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Create Stock
-app.post('/createStock', async (req, res) => {
-  try {
-    const { unitName, unitId, bodyColor, variation, quantity } = req.body;
-    
-    const newStock = new Inventory({
-      unitName,
-      unitId,
-      bodyColor,
-      variation,
-      quantity: quantity || 1
-    });
-
-    await newStock.save();
-    console.log('✅ Created stock:', newStock.unitName);
-    res.json({ success: true, message: 'Stock created successfully', data: newStock });
-  } catch (error) {
-    console.error('❌ Create stock error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
