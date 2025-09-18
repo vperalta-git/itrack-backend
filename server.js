@@ -55,7 +55,7 @@ const app = express();
 
 // MongoDB connection
 const mongoURI = process.env.MONGODB_URI || 
-  'mongodb+srv://itrack_user:' + (process.env.MONGODB_PASSWORD || 'fallback_password') + '@cluster0.py8s8pl.mongodb.net/itrackDB?retryWrites=true&w=majority&appName=Cluster0';
+  'mongodb+srv://itrack_user:itrack123@cluster0.py8s8pl.mongodb.net/itrackDB?retryWrites=true&w=majority&appName=Cluster0';
 
 mongoose.connect(mongoURI)
 .then(() => console.log('✅ Connected to MongoDB Atlas'))
