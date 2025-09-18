@@ -57,10 +57,7 @@ const app = express();
 const mongoURI = process.env.MONGODB_URI || 
   'mongodb+srv://itrack_user:' + (process.env.MONGODB_PASSWORD || 'fallback_password') + '@cluster0.py8s8pl.mongodb.net/itrackDB?retryWrites=true&w=majority&appName=Cluster0';
 
-mongoose.connect(mongoURI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-})
+mongoose.connect(mongoURI)
 .then(() => console.log('✅ Connected to MongoDB Atlas'))
 .catch(err => console.error('❌ MongoDB connection error:', err));
 
@@ -209,6 +206,18 @@ app.get('/getUsers', async (req, res) => {
     res.json({ success: true, data: users });
   } catch (error) {
     console.error('❌ Get users error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Admin users endpoint - for history screen
+app.get('/admin/users', async (req, res) => {
+  try {
+    const users = await User.find({}).select('-password').sort({ createdAt: -1 });
+    console.log(`📊 Admin users: Found ${users.length} users`);
+    res.json({ success: true, data: users });
+  } catch (error) {
+    console.error('❌ Admin users error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -530,14 +539,53 @@ app.get('/api/dispatch/assignments', async (req, res) => {
   try {
     console.log('📋 Fetching dispatch assignments...');
     
-    const assignments = await DispatchAssignment.find().sort({ createdAt: -1 });
+    // Use DriverAllocation model instead of separate DispatchAssignment
+    const assignments = await DriverAllocation.find().sort({ createdAt: -1 });
     
-    console.log(`✅ Found ${assignments.length} dispatch assignments`);
+    // Format the data for dispatch view
+    const dispatchData = assignments.map(allocation => ({
+      _id: allocation._id,
+      unitName: allocation.unitName,
+      unitId: allocation.unitId,
+      bodyColor: allocation.bodyColor,
+      variation: allocation.variation,
+      assignedDriver: allocation.assignedDriver,
+      assignedAgent: allocation.assignedAgent,
+      status: allocation.status,
+      allocatedBy: allocation.allocatedBy,
+      
+      // Process management for dispatch checklist
+      requestedProcesses: allocation.requestedProcesses || [],
+      processStatus: allocation.processStatus || {
+        tinting: false,
+        carwash: false,
+        ceramic_coating: false,
+        accessories: false,
+        rust_proof: false
+      },
+      processCompletedBy: allocation.processCompletedBy || {},
+      processCompletedAt: allocation.processCompletedAt || {},
+      
+      overallProgress: allocation.overallProgress || {
+        completed: 0,
+        total: 0,
+        isComplete: false
+      },
+      
+      readyForRelease: allocation.readyForRelease || false,
+      releasedAt: allocation.releasedAt,
+      releasedBy: allocation.releasedBy,
+      
+      createdAt: allocation.createdAt,
+      updatedAt: allocation.updatedAt
+    }));
+    
+    console.log(`✅ Found ${dispatchData.length} dispatch assignments`);
     
     res.json({
       success: true,
-      data: assignments,
-      count: assignments.length
+      data: dispatchData,
+      count: dispatchData.length
     });
   } catch (error) {
     console.error('❌ Error fetching dispatch assignments:', error);
@@ -554,47 +602,68 @@ app.post('/api/dispatch/assignments', async (req, res) => {
   try {
     console.log('📋 Creating dispatch assignment:', req.body);
     
-    const { vehicleId, unitName, unitId, bodyColor, variation, processes, assignedBy } = req.body;
+    const { vehicleId, unitName, unitId, bodyColor, variation, processes, assignedBy, assignedDriver } = req.body;
     
     // Validate required fields
-    if (!vehicleId || !unitName || !unitId || !processes || !assignedBy) {
+    if (!unitName || !unitId || !processes || !assignedBy) {
       return res.status(400).json({
         success: false,
-        error: 'Missing required fields: vehicleId, unitName, unitId, processes, assignedBy'
+        error: 'Missing required fields: unitName, unitId, processes, assignedBy'
       });
     }
 
     // Check if assignment already exists for this vehicle
-    const existingAssignment = await DispatchAssignment.findOne({ vehicleId });
+    const existingAssignment = await DriverAllocation.findOne({ unitId });
     if (existingAssignment) {
       return res.status(400).json({
         success: false,
-        error: 'Vehicle already assigned to dispatch'
+        error: 'Vehicle already assigned'
       });
     }
-
-    // Create new dispatch assignment
-    const newAssignment = new DispatchAssignment({
-      vehicleId,
+    
+    // Create process status object
+    const processStatus = {
+      tinting: false,
+      carwash: false,
+      ceramic_coating: false,
+      accessories: false,
+      rust_proof: false
+    };
+    
+    // Create new allocation with dispatch processes
+    const newAllocation = new DriverAllocation({
       unitName,
       unitId,
-      bodyColor,
-      variation,
-      processes: Array.isArray(processes) ? processes : [processes],
-      assignedBy,
-      status: 'Assigned to Dispatch'
+      bodyColor: bodyColor || '',
+      variation: variation || '',
+      assignedDriver: assignedDriver || 'Unassigned',
+      status: 'Pending',
+      allocatedBy: assignedBy,
+      
+      // Dispatch-specific fields
+      requestedProcesses: processes,
+      processStatus: processStatus,
+      processCompletedBy: {},
+      processCompletedAt: {},
+      
+      overallProgress: {
+        completed: 0,
+        total: processes.length,
+        isComplete: false
+      },
+      
+      readyForRelease: false
     });
 
-    const savedAssignment = await newAssignment.save();
-    
-    console.log('✅ Dispatch assignment created:', savedAssignment);
-    
+    const savedAssignment = await newAllocation.save();
+    console.log(`✅ Created dispatch assignment for ${unitId}`);
+
     res.status(201).json({
       success: true,
       data: savedAssignment,
-      message: 'Vehicle successfully assigned to dispatch'
+      message: 'Dispatch assignment created successfully'
     });
-    
+
   } catch (error) {
     console.error('❌ Error creating dispatch assignment:', error);
     res.status(500).json({
@@ -605,36 +674,78 @@ app.post('/api/dispatch/assignments', async (req, res) => {
   }
 });
 
+// PUT /api/dispatch/assignments/:id/process - Update process completion status
+
 // PUT /api/dispatch/assignments/:id/process - Update process completion
 app.put('/api/dispatch/assignments/:id/process', async (req, res) => {
   try {
     const { id } = req.params;
     const { processName, completedBy } = req.body;
     
-    console.log(`📋 Updating process ${processName} for assignment ${id}`);
+    console.log(`📋 Updating process ${processName} for assignment ${id} by ${completedBy}`);
     
-    const assignment = await DispatchAssignment.findById(id);
-    if (!assignment) {
+    // Find allocation by ID
+    const allocation = await DriverAllocation.findById(id);
+    if (!allocation) {
       return res.status(404).json({
         success: false,
-        error: 'Dispatch assignment not found'
+        error: 'Allocation not found'
       });
     }
 
-    // Add process to completed list if not already there
-    if (!assignment.completedProcesses.includes(processName)) {
-      assignment.completedProcesses.push(processName);
+    // Validate process name
+    const validProcesses = ['tinting', 'carwash', 'ceramic_coating', 'accessories', 'rust_proof'];
+    if (!validProcesses.includes(processName)) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid process name'
+      });
     }
 
-    // Check if all processes are completed
-    const allProcessesCompleted = assignment.processes.every(process => 
-      assignment.completedProcesses.includes(process)
+    // Update process status
+    allocation.processStatus[processName] = true;
+    allocation.processCompletedBy[processName] = completedBy;
+    allocation.processCompletedAt[processName] = new Date();
+
+    // Update overall progress
+    const completedCount = Object.values(allocation.processStatus).filter(Boolean).length;
+    const totalCount = allocation.requestedProcesses.length;
+    
+    allocation.overallProgress = {
+      completed: completedCount,
+      total: totalCount,
+      isComplete: completedCount === totalCount
+    };
+
+    // Check if all requested processes are completed
+    const allProcessesCompleted = allocation.requestedProcesses.every(process => 
+      allocation.processStatus[process] === true
     );
 
     if (allProcessesCompleted) {
-      assignment.status = 'Ready for Release';
-      assignment.completedAt = new Date();
-      assignment.completedBy = completedBy;
+      allocation.status = 'Ready for Release';
+      allocation.readyForRelease = true;
+    }
+
+    const updatedAllocation = await allocation.save();
+
+    console.log(`✅ Updated process ${processName} for ${allocation.unitId}`);
+    
+    res.json({
+      success: true,
+      data: updatedAllocation,
+      message: `Process ${processName} marked as completed`
+    });
+
+  } catch (error) {
+    console.error('❌ Error updating process:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to update process',
+      details: error.message
+    });
+  }
+});
     } else {
       assignment.status = 'In Progress';
     }
@@ -952,6 +1063,84 @@ app.get('/api/maps/nearby', async (req, res) => {
       success: false,
       error: 'Nearby places service temporarily unavailable'
     });
+  }
+});
+
+// ================== AUDIT TRAIL ENDPOINT ==================
+// Get audit trail for history screen
+app.get('/api/audit-trail', async (req, res) => {
+  try {
+    console.log('📋 Fetching audit trail data...');
+    
+    // Collect activities from various collections
+    const activities = [];
+    
+    // Get recent allocations
+    const allocations = await DriverAllocation.find({}).sort({ createdAt: -1 }).limit(50);
+    allocations.forEach(allocation => {
+      activities.push({
+        _id: allocation._id,
+        type: 'allocation',
+        action: allocation.status === 'Delivered' ? 'completed' : 'created',
+        description: `Vehicle ${allocation.unitName} (${allocation.unitId}) ${allocation.status === 'Delivered' ? 'delivered' : 'allocated'} to ${allocation.assignedDriver}`,
+        user: allocation.allocatedBy || 'System',
+        timestamp: allocation.updatedAt || allocation.createdAt,
+        details: {
+          unitName: allocation.unitName,
+          unitId: allocation.unitId,
+          driver: allocation.assignedDriver,
+          status: allocation.status
+        }
+      });
+    });
+    
+    // Get recent completed requests
+    const completedRequests = await CompletedRequest.find({}).sort({ completedAt: -1 }).limit(30);
+    completedRequests.forEach(request => {
+      activities.push({
+        _id: request._id,
+        type: 'service_request',
+        action: 'completed',
+        description: `Service request for ${request.vehicleRegNo} completed`,
+        user: request.preparedBy || 'Service Staff',
+        timestamp: request.completedAt,
+        details: {
+          vehicleRegNo: request.vehicleRegNo,
+          service: request.service,
+          duration: request.serviceDurationMinutes
+        }
+      });
+    });
+    
+    // Get recent in-progress requests
+    const inProgressRequests = await InProgressRequest.find({}).sort({ inProgressAt: -1 }).limit(20);
+    inProgressRequests.forEach(request => {
+      activities.push({
+        _id: request._id,
+        type: 'service_request',
+        action: 'started',
+        description: `Service request for ${request.vehicleRegNo} started`,
+        user: request.preparedBy || 'Service Staff',
+        timestamp: request.inProgressAt,
+        details: {
+          vehicleRegNo: request.vehicleRegNo,
+          service: request.service
+        }
+      });
+    });
+    
+    // Sort activities by timestamp (newest first)
+    activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    console.log(`📊 Found ${activities.length} audit trail activities`);
+    res.json({ 
+      success: true, 
+      data: activities.slice(0, 100) // Limit to 100 most recent activities
+    });
+    
+  } catch (error) {
+    console.error('❌ Audit trail error:', error);
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
