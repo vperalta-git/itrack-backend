@@ -316,11 +316,96 @@ app.delete('/deleteUser/:id', async (req, res) => {
 // Get Service Requests
 app.get('/getRequest', async (req, res) => {
   try {
-    const requests = await ServiceRequest.find({}).sort({ createdAt: -1 });
+    const requests = await Servicerequest.find({}).sort({ createdAt: -1 });
     console.log(`📊 Found ${requests.length} service requests`);
     res.json({ success: true, data: requests });
   } catch (error) {
     console.error('❌ Get requests error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get Stock/Inventory
+app.get('/getStock', async (req, res) => {
+  try {
+    const inventory = await Inventory.find({}).sort({ createdAt: -1 });
+    console.log(`📊 Found ${inventory.length} inventory items`);
+    res.json({ success: true, data: inventory });
+  } catch (error) {
+    console.error('❌ Get stock error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create Stock
+app.post('/createStock', async (req, res) => {
+  try {
+    const { unitName, unitId, bodyColor, variation, quantity } = req.body;
+    
+    const newStock = new Inventory({
+      unitName,
+      unitId: unitId || unitName,
+      bodyColor,
+      variation,
+      quantity: quantity || 1
+    });
+
+    await newStock.save();
+    console.log('✅ Created stock:', newStock.unitName);
+    res.json({ success: true, message: 'Stock created successfully', data: newStock });
+  } catch (error) {
+    console.error('❌ Create stock error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get Driver Allocations
+app.get('/getAllocation', async (req, res) => {
+  try {
+    const allocations = await DriverAllocation.find({}).sort({ createdAt: -1 });
+    console.log(`📊 Found ${allocations.length} driver allocations`);
+    res.json({ success: true, data: allocations });
+  } catch (error) {
+    console.error('❌ Get allocations error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create Allocation
+app.post('/createAllocation', async (req, res) => {
+  try {
+    const { unitName, unitId, bodyColor, variation, assignedDriver, processesToBeDone } = req.body;
+    
+    const newAllocation = new DriverAllocation({
+      unitName,
+      unitId,
+      bodyColor,
+      variation,
+      assignedDriver,
+      processesToBeDone: processesToBeDone || [],
+      status: 'In Progress',
+      date: new Date()
+    });
+
+    await newAllocation.save();
+    console.log('✅ Created allocation:', newAllocation.unitName);
+    res.json({ success: true, message: 'Allocation created successfully', data: newAllocation });
+  } catch (error) {
+    console.error('❌ Create allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create Service Request
+app.post('/createRequest', async (req, res) => {
+  try {
+    const requestData = req.body;
+    const newRequest = new Servicerequest(requestData);
+    await newRequest.save();
+    console.log('✅ Created service request:', newRequest._id);
+    res.json({ success: true, message: 'Service request created successfully', data: newRequest });
+  } catch (error) {
+    console.error('❌ Create service request error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
