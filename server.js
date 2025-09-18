@@ -516,24 +516,6 @@ app.get('/api/mobile-config', (req, res) => {
 
 // ================== DISPATCH ASSIGNMENT ENDPOINTS ==================
 
-// Dispatch Assignment Schema
-const dispatchAssignmentSchema = new mongoose.Schema({
-  vehicleId: { type: String, required: true },
-  unitName: { type: String, required: true },
-  unitId: { type: String, required: true },
-  bodyColor: { type: String, required: true },
-  variation: { type: String, required: true },
-  processes: [{ type: String, required: true }],
-  status: { type: String, default: 'Assigned to Dispatch' },
-  assignedBy: { type: String, required: true },
-  assignedAt: { type: Date, default: Date.now },
-  completedProcesses: [{ type: String, default: [] }],
-  completedAt: { type: Date },
-  completedBy: { type: String }
-}, { timestamps: true });
-
-const DispatchAssignment = mongoose.model('DispatchAssignment', dispatchAssignmentSchema);
-
 // GET /api/dispatch/assignments - Fetch all dispatch assignments
 app.get('/api/dispatch/assignments', async (req, res) => {
   try {
@@ -746,29 +728,6 @@ app.put('/api/dispatch/assignments/:id/process', async (req, res) => {
     });
   }
 });
-    } else {
-      assignment.status = 'In Progress';
-    }
-
-    const updatedAssignment = await assignment.save();
-    
-    console.log('✅ Process updated:', updatedAssignment);
-    
-    res.json({
-      success: true,
-      data: updatedAssignment,
-      message: `Process ${processName} completed successfully`
-    });
-    
-  } catch (error) {
-    console.error('❌ Error updating process:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to update process',
-      details: error.message
-    });
-  }
-});
 
 // PUT /api/dispatch/assignments/:id - Update dispatch assignment status
 app.put('/api/dispatch/assignments/:id', async (req, res) => {
@@ -778,7 +737,7 @@ app.put('/api/dispatch/assignments/:id', async (req, res) => {
     
     console.log(`📋 Updating assignment ${id} status to ${status}`);
     
-    const assignment = await DispatchAssignment.findById(id);
+    const assignment = await DriverAllocation.findById(id);
     if (!assignment) {
       return res.status(404).json({
         success: false,
@@ -819,7 +778,7 @@ app.delete('/api/dispatch/assignments/:id', async (req, res) => {
     
     console.log(`📋 Deleting dispatch assignment ${id}`);
     
-    const deletedAssignment = await DispatchAssignment.findByIdAndDelete(id);
+    const deletedAssignment = await DriverAllocation.findByIdAndDelete(id);
     if (!deletedAssignment) {
       return res.status(404).json({
         success: false,
