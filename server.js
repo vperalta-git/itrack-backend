@@ -362,7 +362,16 @@ app.post('/createStock', async (req, res) => {
 // Get Driver Allocations
 app.get('/getAllocation', async (req, res) => {
   try {
-    const allocations = await DriverAllocation.find({}).sort({ createdAt: -1 });
+    const { assignedDriver } = req.query;
+    
+    // Build query filter
+    let query = {};
+    if (assignedDriver) {
+      query.assignedDriver = assignedDriver;
+      console.log(`📊 Filtering allocations for driver: ${assignedDriver}`);
+    }
+    
+    const allocations = await DriverAllocation.find(query).sort({ createdAt: -1 });
     console.log(`📊 Found ${allocations.length} driver allocations`);
     res.json({ success: true, data: allocations });
   } catch (error) {
@@ -818,9 +827,9 @@ app.put('/api/dispatch/assignments/:id/process', async (req, res) => {
 app.put('/api/dispatch/assignments/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { status, completedBy } = req.body;
+    const { status, completedBy, assignedDriver } = req.body;
     
-    console.log(`📋 Updating assignment ${id} status to ${status}`);
+    console.log(`📋 Updating assignment ${id}:`, { status, assignedDriver, completedBy });
     
     const assignment = await DriverAllocation.findById(id);
     if (!assignment) {
@@ -830,7 +839,15 @@ app.put('/api/dispatch/assignments/:id', async (req, res) => {
       });
     }
 
-    assignment.status = status;
+    // Update status if provided
+    if (status) assignment.status = status;
+    
+    // Update assigned driver if provided
+    if (assignedDriver !== undefined) {
+      assignment.assignedDriver = assignedDriver;
+      console.log(`👤 Assigned driver "${assignedDriver}" to vehicle ${assignment.unitName} (${assignment.unitId})`);
+    }
+    
     if (status === 'Released' || status === 'Completed') {
       assignment.completedAt = new Date();
       assignment.completedBy = completedBy;
@@ -838,19 +855,66 @@ app.put('/api/dispatch/assignments/:id', async (req, res) => {
 
     const updatedAssignment = await assignment.save();
     
-    console.log('✅ Assignment status updated:', updatedAssignment);
+    console.log('✅ Assignment updated successfully');
     
     res.json({
       success: true,
       data: updatedAssignment,
-      message: `Assignment status updated to ${status}`
+      message: `Assignment updated successfully`
     });
     
   } catch (error) {
-    console.error('❌ Error updating assignment status:', error);
+    console.error('❌ Error updating assignment:', error);
     res.status(500).json({
       success: false,
-      error: 'Failed to update assignment status',
+      error: 'Failed to update assignment',
+      details: error.message
+    });
+  }
+});
+
+// PUT /api/dispatch/assignments/:id/assign-driver - Assign driver to dispatch assignment
+app.put('/api/dispatch/assignments/:id/assign-driver', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { assignedDriver, assignedBy } = req.body;
+    
+    if (!assignedDriver) {
+      return res.status(400).json({
+        success: false,
+        error: 'Driver name is required'
+      });
+    }
+    
+    console.log(`👤 Assigning driver "${assignedDriver}" to dispatch assignment ${id}`);
+    
+    const assignment = await DriverAllocation.findById(id);
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Dispatch assignment not found'
+      });
+    }
+
+    assignment.assignedDriver = assignedDriver;
+    assignment.updatedAt = new Date();
+    if (assignedBy) assignment.allocatedBy = assignedBy;
+
+    const updatedAssignment = await assignment.save();
+    
+    console.log(`✅ Driver assigned: ${assignedDriver} -> ${assignment.unitName} (${assignment.unitId})`);
+    
+    res.json({
+      success: true,
+      data: updatedAssignment,
+      message: `Driver ${assignedDriver} assigned successfully`
+    });
+    
+  } catch (error) {
+    console.error('❌ Error assigning driver:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to assign driver',
       details: error.message
     });
   }
