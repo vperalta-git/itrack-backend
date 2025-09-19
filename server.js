@@ -107,184 +107,28 @@ const Servicerequest = require('./models/Servicerequest');
 const CompletedRequest = require('./models/CompletedRequest');
 const InProgressRequest = require('./models/InProgressRequest');
 
+// Import controllers
+const userController = require('./controllers/userController');
+const adminController = require('./controllers/adminController');
+const inventoryController = require('./controllers/inventoryController');
+const allocationController = require('./controllers/allocationController');
+const requestController = require('./controllers/requestController');
+const systemController = require('./controllers/systemController');
+const releaseController = require('./controllers/releaseController');
+
 // ================== MOBILE APP ROUTES (Enhanced with Password Management) ==================
 
 // Login endpoint - Enhanced to support temporary passwords
-app.post('/login', async (req, res) => {
-  try {
-    const { username, password } = req.body;
-    console.log('📥 Login attempt:', username);
-    
-    if (!username || !password) {
-      return res.status(400).json({ success: false, message: 'Username and password required' });
-    }
-
-    // Find user by username (case insensitive) or accountName
-    const user = await User.findOne({ 
-      $or: [
-        { username: username.toLowerCase() },
-        { accountName: username }
-      ]
-    });
-    
-    if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
-
-    let isValidLogin = false;
-    let isTemporaryPassword = false;
-
-    // Check if using temporary password
-    if (user.temporaryPassword && 
-        user.temporaryPasswordExpires && 
-        user.temporaryPasswordExpires > Date.now()) {
-      
-      if (password === user.temporaryPassword) {
-        isValidLogin = true;
-        isTemporaryPassword = true;
-        
-        console.log('🔑 User logged in with temporary password:', username);
-        
-        // Clear temporary password after successful use
-        user.temporaryPassword = undefined;
-        user.temporaryPasswordExpires = undefined;
-        await user.save();
-      }
-    }
-
-    // If not using temporary password, check regular password
-    if (!isValidLogin && user.password === password) {
-      isValidLogin = true;
-      console.log('🔑 User logged in with regular password:', username);
-    }
-
-    if (!isValidLogin) {
-      return res.status(401).json({ success: false, message: 'Invalid credentials' });
-    }
-
-    // Update last login
-    user.lastLogin = new Date();
-    await user.save();
-
-    // Create session
-    const sessionUser = {
-      id: user._id,
-      username: user.username,
-      accountName: user.accountName,
-      email: user.email,
-      role: user.role,
-      assignedTo: user.assignedTo
-    };
-
-    req.session.user = sessionUser;
-
-    const response = {
-      success: true,
-      message: 'Login successful',
-      user: sessionUser
-    };
-
-    // If temporary password was used, notify frontend to prompt password change
-    if (isTemporaryPassword) {
-      response.requirePasswordChange = true;
-      response.message = 'Login successful with temporary password. Please change your password immediately.';
-      console.log('⚠️  User should change password immediately:', username);
-    }
-
-    res.json(response);
-  } catch (error) {
-    console.error('❌ Login error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
+app.post('/login', userController.login);
 
 // Get Users
-app.get('/getUsers', async (req, res) => {
-  try {
-    const users = await User.find({}).select('-password');
-    console.log(`📊 Found ${users.length} users`);
-    res.json({ success: true, data: users });
-  } catch (error) {
-    console.error('❌ Get users error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+app.get('/getUsers', userController.getUsers);
 
 // Admin users endpoint - for history screen
-app.get('/admin/users', async (req, res) => {
-  try {
-    const users = await User.find({}).select('-password').sort({ createdAt: -1 });
-    console.log(`📊 Admin users: Found ${users.length} users`);
-    res.json({ success: true, data: users });
-  } catch (error) {
-    console.error('❌ Admin users error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+app.get('/admin/users', adminController.getAllUsers);
 
 // Create User - Enhanced with better validation
-app.post('/createUser', async (req, res) => {
-  try {
-    const { username, password, role, name, email, phone, assignedTo, accountName } = req.body;
-    
-    console.log('📝 Creating user with data:', { username, role, accountName: accountName || name || username });
-    
-    // Validate required fields
-    if (!username || !password || !role) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Username, password, and role are required' 
-      });
-    }
-    
-    // Validate role
-    const validRoles = ['Admin', 'Supervisor', 'Manager', 'Sales Agent', 'Driver', 'Dispatch'];
-    if (!validRoles.includes(role)) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Invalid role. Must be one of: ${validRoles.join(', ')}` 
-      });
-    }
-    
-    // Check if user already exists
-    const existingUser = await User.findOne({ username: username.toLowerCase() });
-    if (existingUser) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Username already exists' 
-      });
-    }
-    
-    const newUser = new User({
-      username: username.toLowerCase().trim(),
-      password: password, // In production, this should be hashed
-      role: role,
-      name: name || username,
-      email: email || '',
-      phone: phone || '',
-      assignedTo: assignedTo || null,
-      accountName: accountName || name || username,
-      isActive: true,
-      date: new Date()
-    });
-    
-    await newUser.save();
-    
-    // Return user without password
-    const userResponse = { ...newUser.toObject() };
-    delete userResponse.password;
-    
-    console.log('✅ Created user:', username, 'with role:', role, 'accountName:', userResponse.accountName);
-    res.json({ success: true, message: 'User created successfully', data: userResponse });
-  } catch (error) {
-    console.error('❌ Create user error:', error);
-    if (error.code === 11000) {
-      res.status(400).json({ success: false, message: 'Username already exists' });
-    } else {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  }
-});
+app.post('/createUser', userController.createUser);
 
 // Update User
 app.put('/updateUser/:id', async (req, res) => {
@@ -330,172 +174,10 @@ app.delete('/deleteUser/:id', async (req, res) => {
 });
 
 // Admin endpoint for creating driver accounts specifically
-app.post('/admin/create-driver', async (req, res) => {
-  try {
-    const { username, password, accountName, email, phone } = req.body;
-    
-    console.log('👤 Admin creating driver account:', { username, accountName });
-    
-    if (!username || !password || !accountName) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Username, password, and account name are required for driver creation' 
-      });
-    }
-    
-    // Check if username already exists
-    const existingUser = await User.findOne({ username: username.toLowerCase() });
-    if (existingUser) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Username '${username}' already exists` 
-      });
-    }
-    
-    const newDriver = new User({
-      username: username.toLowerCase().trim(),
-      password: password,
-      role: 'Driver',
-      name: accountName,
-      accountName: accountName,
-      email: email || '',
-      phone: phone || '',
-      isActive: true,
-      assignedTo: null,
-      date: new Date()
-    });
-    
-    await newDriver.save();
-    
-    // Return driver without password
-    const driverResponse = { ...newDriver.toObject() };
-    delete driverResponse.password;
-    
-    console.log('✅ Created driver account:', username, 'with name:', accountName);
-    res.json({ 
-      success: true, 
-      message: `Driver account '${accountName}' created successfully`,
-      data: driverResponse 
-    });
-  } catch (error) {
-    console.error('❌ Create driver error:', error);
-    if (error.code === 11000) {
-      res.status(400).json({ success: false, message: 'Username already exists' });
-    } else {
-      res.status(500).json({ success: false, error: error.message });
-    }
-  }
-});
+app.post('/admin/create-driver', adminController.createDriver);
 
 // Admin endpoint for assigning vehicles to drivers with enhanced validation
-app.post('/admin/assign-vehicle', async (req, res) => {
-  try {
-    const { 
-      unitName, 
-      unitId, 
-      driverUsername, 
-      agentUsername, 
-      processes, 
-      bodyColor, 
-      variation 
-    } = req.body;
-    
-    console.log('🚗 Admin assigning vehicle:', { unitName, unitId, driverUsername, agentUsername });
-    
-    if (!unitName || !driverUsername) {
-      return res.status(400).json({ 
-        success: false, 
-        message: 'Vehicle name and driver username are required' 
-      });
-    }
-    
-    // Verify driver exists and has correct role
-    const driver = await User.findOne({ 
-      username: driverUsername.toLowerCase(),
-      role: 'Driver',
-      isActive: true 
-    });
-    
-    if (!driver) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Driver '${driverUsername}' not found or not an active driver` 
-      });
-    }
-    
-    // Verify agent exists if provided
-    let agent = null;
-    if (agentUsername) {
-      agent = await User.findOne({ 
-        username: agentUsername.toLowerCase(),
-        isActive: true 
-      });
-      
-      if (!agent) {
-        return res.status(400).json({ 
-          success: false, 
-          message: `Agent '${agentUsername}' not found or not active` 
-        });
-      }
-    }
-    
-    // Check if vehicle is already assigned
-    const existingAllocation = await DriverAllocation.findOne({ 
-      unitId: unitId,
-      status: { $in: ['In Progress', 'Assigned', 'Pending'] }
-    });
-    
-    if (existingAllocation) {
-      return res.status(400).json({ 
-        success: false, 
-        message: `Vehicle ${unitId} is already assigned to ${existingAllocation.assignedDriver}` 
-      });
-    }
-    
-    const allocation = new DriverAllocation({
-      unitName,
-      unitId: unitId || `VIN_${Date.now()}`,
-      bodyColor: bodyColor || 'Not Specified',
-      variation: variation || 'Standard',
-      assignedDriver: driver.username,
-      assignedAgent: agent ? agent.username : null,
-      processesToBeDone: processes || ['delivery_to_isuzu_pasig'],
-      status: 'Assigned',
-      allocatedBy: 'Admin',
-      date: new Date()
-    });
-    
-    await allocation.save();
-    
-    console.log('✅ Vehicle assigned successfully:', {
-      vehicle: `${unitName} (${unitId})`,
-      driver: driver.accountName,
-      agent: agent ? agent.accountName : 'None',
-      processes: allocation.processesToBeDone.length
-    });
-    
-    res.json({ 
-      success: true, 
-      message: `Vehicle '${unitName}' assigned to driver '${driver.accountName}' successfully`,
-      data: {
-        allocation,
-        driverInfo: {
-          username: driver.username,
-          accountName: driver.accountName,
-          email: driver.email
-        },
-        agentInfo: agent ? {
-          username: agent.username,
-          accountName: agent.accountName,
-          email: agent.email
-        } : null
-      }
-    });
-  } catch (error) {
-    console.error('❌ Vehicle assignment error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+app.post('/admin/assign-vehicle', adminController.assignVehicle);
 
 // Get Service Requests
 app.get('/getRequest', async (req, res) => {
@@ -510,59 +192,27 @@ app.get('/getRequest', async (req, res) => {
 });
 
 // Get Stock/Inventory
-app.get('/getStock', async (req, res) => {
-  try {
-    const inventory = await Inventory.find({}).sort({ createdAt: -1 });
-    console.log(`📊 Found ${inventory.length} inventory items`);
-    res.json({ success: true, data: inventory });
-  } catch (error) {
-    console.error('❌ Get stock error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+app.get('/getStock', inventoryController.getStock);
 
 // Create Stock
-app.post('/createStock', async (req, res) => {
-  try {
-    const { unitName, unitId, bodyColor, variation, quantity } = req.body;
-    
-    const newStock = new Inventory({
-      unitName,
-      unitId: unitId || unitName,
-      bodyColor,
-      variation,
-      quantity: quantity || 1
-    });
+app.post('/createStock', inventoryController.createStock);
 
-    await newStock.save();
-    console.log('✅ Created stock:', newStock.unitName);
-    res.json({ success: true, message: 'Stock created successfully', data: newStock });
-  } catch (error) {
-    console.error('❌ Create stock error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+// Update Stock
+app.put('/updateStock/:id', inventoryController.updateStock);
+
+// Delete Stock
+app.delete('/deleteStock/:id', inventoryController.deleteStock);
+
+// Mobile configuration endpoint
+app.get('/api/mobile-config', systemController.getMobileConfig);
+
+// Release management endpoints
+app.get('/api/releases', releaseController.getReleases);
+app.post('/api/releases', releaseController.createRelease);
+app.post('/api/release/confirm', releaseController.confirmRelease);
 
 // Get Driver Allocations
-app.get('/getAllocation', async (req, res) => {
-  try {
-    const { assignedDriver } = req.query;
-    
-    // Build query filter
-    let query = {};
-    if (assignedDriver) {
-      query.assignedDriver = assignedDriver;
-      console.log(`📊 Filtering allocations for driver: ${assignedDriver}`);
-    }
-    
-    const allocations = await DriverAllocation.find(query).sort({ createdAt: -1 });
-    console.log(`📊 Found ${allocations.length} driver allocations`);
-    res.json({ success: true, data: allocations });
-  } catch (error) {
-    console.error('❌ Get allocations error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
+app.get('/getAllocation', allocationController.getAllocation);
 
 // Create Allocation - Enhanced with better validation  
 app.post('/createAllocation', async (req, res) => {
