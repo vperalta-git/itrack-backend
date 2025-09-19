@@ -222,16 +222,27 @@ app.get('/admin/users', async (req, res) => {
   }
 });
 
-// Create User
+// Create User - Enhanced with better validation
 app.post('/createUser', async (req, res) => {
   try {
-    const { username, password, role, name, email, phone, assignedTo } = req.body;
+    const { username, password, role, name, email, phone, assignedTo, accountName } = req.body;
+    
+    console.log('📝 Creating user with data:', { username, role, accountName: accountName || name || username });
     
     // Validate required fields
     if (!username || !password || !role) {
       return res.status(400).json({ 
         success: false, 
         message: 'Username, password, and role are required' 
+      });
+    }
+    
+    // Validate role
+    const validRoles = ['Admin', 'Supervisor', 'Manager', 'Sales Agent', 'Driver', 'Dispatch'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Invalid role. Must be one of: ${validRoles.join(', ')}` 
       });
     }
     
@@ -245,14 +256,15 @@ app.post('/createUser', async (req, res) => {
     }
     
     const newUser = new User({
-      username: username.toLowerCase(),
+      username: username.toLowerCase().trim(),
       password: password, // In production, this should be hashed
       role: role,
       name: name || username,
       email: email || '',
       phone: phone || '',
       assignedTo: assignedTo || null,
-      accountName: name || username,
+      accountName: accountName || name || username,
+      isActive: true,
       date: new Date()
     });
     
@@ -262,11 +274,15 @@ app.post('/createUser', async (req, res) => {
     const userResponse = { ...newUser.toObject() };
     delete userResponse.password;
     
-    console.log('✅ Created user:', username, 'with role:', role);
+    console.log('✅ Created user:', username, 'with role:', role, 'accountName:', userResponse.accountName);
     res.json({ success: true, message: 'User created successfully', data: userResponse });
   } catch (error) {
     console.error('❌ Create user error:', error);
-    res.status(500).json({ success: false, error: error.message });
+    if (error.code === 11000) {
+      res.status(400).json({ success: false, message: 'Username already exists' });
+    } else {
+      res.status(500).json({ success: false, error: error.message });
+    }
   }
 });
 
@@ -309,6 +325,174 @@ app.delete('/deleteUser/:id', async (req, res) => {
     res.json({ success: true, message: 'User deleted successfully', data: deletedUser });
   } catch (error) {
     console.error('❌ Delete user error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Admin endpoint for creating driver accounts specifically
+app.post('/admin/create-driver', async (req, res) => {
+  try {
+    const { username, password, accountName, email, phone } = req.body;
+    
+    console.log('👤 Admin creating driver account:', { username, accountName });
+    
+    if (!username || !password || !accountName) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Username, password, and account name are required for driver creation' 
+      });
+    }
+    
+    // Check if username already exists
+    const existingUser = await User.findOne({ username: username.toLowerCase() });
+    if (existingUser) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Username '${username}' already exists` 
+      });
+    }
+    
+    const newDriver = new User({
+      username: username.toLowerCase().trim(),
+      password: password,
+      role: 'Driver',
+      name: accountName,
+      accountName: accountName,
+      email: email || '',
+      phone: phone || '',
+      isActive: true,
+      assignedTo: null,
+      date: new Date()
+    });
+    
+    await newDriver.save();
+    
+    // Return driver without password
+    const driverResponse = { ...newDriver.toObject() };
+    delete driverResponse.password;
+    
+    console.log('✅ Created driver account:', username, 'with name:', accountName);
+    res.json({ 
+      success: true, 
+      message: `Driver account '${accountName}' created successfully`,
+      data: driverResponse 
+    });
+  } catch (error) {
+    console.error('❌ Create driver error:', error);
+    if (error.code === 11000) {
+      res.status(400).json({ success: false, message: 'Username already exists' });
+    } else {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  }
+});
+
+// Admin endpoint for assigning vehicles to drivers with enhanced validation
+app.post('/admin/assign-vehicle', async (req, res) => {
+  try {
+    const { 
+      unitName, 
+      unitId, 
+      driverUsername, 
+      agentUsername, 
+      processes, 
+      bodyColor, 
+      variation 
+    } = req.body;
+    
+    console.log('🚗 Admin assigning vehicle:', { unitName, unitId, driverUsername, agentUsername });
+    
+    if (!unitName || !driverUsername) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vehicle name and driver username are required' 
+      });
+    }
+    
+    // Verify driver exists and has correct role
+    const driver = await User.findOne({ 
+      username: driverUsername.toLowerCase(),
+      role: 'Driver',
+      isActive: true 
+    });
+    
+    if (!driver) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Driver '${driverUsername}' not found or not an active driver` 
+      });
+    }
+    
+    // Verify agent exists if provided
+    let agent = null;
+    if (agentUsername) {
+      agent = await User.findOne({ 
+        username: agentUsername.toLowerCase(),
+        isActive: true 
+      });
+      
+      if (!agent) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Agent '${agentUsername}' not found or not active` 
+        });
+      }
+    }
+    
+    // Check if vehicle is already assigned
+    const existingAllocation = await DriverAllocation.findOne({ 
+      unitId: unitId,
+      status: { $in: ['In Progress', 'Assigned', 'Pending'] }
+    });
+    
+    if (existingAllocation) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Vehicle ${unitId} is already assigned to ${existingAllocation.assignedDriver}` 
+      });
+    }
+    
+    const allocation = new DriverAllocation({
+      unitName,
+      unitId: unitId || `VIN_${Date.now()}`,
+      bodyColor: bodyColor || 'Not Specified',
+      variation: variation || 'Standard',
+      assignedDriver: driver.username,
+      assignedAgent: agent ? agent.username : null,
+      processesToBeDone: processes || ['delivery_to_isuzu_pasig'],
+      status: 'Assigned',
+      allocatedBy: 'Admin',
+      date: new Date()
+    });
+    
+    await allocation.save();
+    
+    console.log('✅ Vehicle assigned successfully:', {
+      vehicle: `${unitName} (${unitId})`,
+      driver: driver.accountName,
+      agent: agent ? agent.accountName : 'None',
+      processes: allocation.processesToBeDone.length
+    });
+    
+    res.json({ 
+      success: true, 
+      message: `Vehicle '${unitName}' assigned to driver '${driver.accountName}' successfully`,
+      data: {
+        allocation,
+        driverInfo: {
+          username: driver.username,
+          accountName: driver.accountName,
+          email: driver.email
+        },
+        agentInfo: agent ? {
+          username: agent.username,
+          accountName: agent.accountName,
+          email: agent.email
+        } : null
+      }
+    });
+  } catch (error) {
+    console.error('❌ Vehicle assignment error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -380,24 +564,56 @@ app.get('/getAllocation', async (req, res) => {
   }
 });
 
-// Create Allocation
+// Create Allocation - Enhanced with better validation  
 app.post('/createAllocation', async (req, res) => {
   try {
-    const { unitName, unitId, bodyColor, variation, assignedDriver, processesToBeDone } = req.body;
+    const { unitName, unitId, bodyColor, variation, assignedDriver, assignedAgent, processesToBeDone, allocatedBy } = req.body;
+    
+    console.log('📝 Creating allocation:', { unitName, unitId, assignedDriver, assignedAgent });
+    
+    // Validate required fields
+    if (!unitName || !assignedDriver) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Unit name and assigned driver are required' 
+      });
+    }
+    
+    // Verify driver exists and has correct role
+    const driver = await User.findOne({ username: assignedDriver, role: 'Driver' });
+    if (!driver) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Driver '${assignedDriver}' not found or not a valid driver` 
+      });
+    }
+    
+    // Verify agent exists if provided
+    if (assignedAgent) {
+      const agent = await User.findOne({ username: assignedAgent });
+      if (!agent) {
+        return res.status(400).json({ 
+          success: false, 
+          message: `Agent '${assignedAgent}' not found` 
+        });
+      }
+    }
     
     const newAllocation = new DriverAllocation({
       unitName,
-      unitId,
-      bodyColor,
-      variation,
+      unitId: unitId || `UNIT_${Date.now()}`,
+      bodyColor: bodyColor || 'Not Specified',
+      variation: variation || 'Standard',
       assignedDriver,
+      assignedAgent: assignedAgent || null,
       processesToBeDone: processesToBeDone || [],
       status: 'In Progress',
+      allocatedBy: allocatedBy || 'Admin',
       date: new Date()
     });
 
     await newAllocation.save();
-    console.log('✅ Created allocation:', newAllocation.unitName);
+    console.log('✅ Created allocation:', newAllocation.unitName, 'for driver:', assignedDriver);
     res.json({ success: true, message: 'Allocation created successfully', data: newAllocation });
   } catch (error) {
     console.error('❌ Create allocation error:', error);
