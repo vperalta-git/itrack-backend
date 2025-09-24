@@ -1118,6 +1118,239 @@ app.get('/api/audit-trail', async (req, res) => {
   }
 });
 
+// ================== LIVE GPS TRACKING & DIRECTIONS ENDPOINTS ==================
+
+// Update driver location (called by mobile app)
+app.post('/api/tracking/update-location', async (req, res) => {
+  try {
+    const { driverName, latitude, longitude, speed, heading } = req.body;
+    
+    if (!driverName || !latitude || !longitude) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Driver name, latitude, and longitude are required' 
+      });
+    }
+    
+    // Update all allocations for this driver
+    const updateResult = await DriverAllocation.updateMany(
+      { assignedDriver: driverName },
+      {
+        $set: {
+          'currentLocation.latitude': parseFloat(latitude),
+          'currentLocation.longitude': parseFloat(longitude),
+          'currentLocation.lastUpdated': new Date()
+        },
+        $push: {
+          locationHistory: {
+            latitude: parseFloat(latitude),
+            longitude: parseFloat(longitude),
+            timestamp: new Date(),
+            speed: speed || 0,
+            heading: heading || 0
+          }
+        }
+      }
+    );
+    
+    console.log(`📍 Location updated for driver ${driverName}: ${latitude}, ${longitude}`);
+    
+    res.json({
+      success: true,
+      message: `Location updated for ${updateResult.modifiedCount} allocations`,
+      location: { latitude: parseFloat(latitude), longitude: parseFloat(longitude) }
+    });
+    
+  } catch (error) {
+    console.error('❌ Location update error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get driver current location and route
+app.get('/api/tracking/driver/:driverName', async (req, res) => {
+  try {
+    const { driverName } = req.params;
+    
+    const allocations = await DriverAllocation.find({ assignedDriver: driverName });
+    
+    if (allocations.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No allocations found for this driver',
+        currentLocation: null,
+        allocations: []
+      });
+    }
+    
+    // Get most recent location from any allocation
+    const allocation = allocations[0];
+    
+    res.json({
+      success: true,
+      currentLocation: allocation.currentLocation,
+      allocations: allocations.map(alloc => ({
+        unitId: alloc.unitId,
+        unitName: alloc.unitName,
+        status: alloc.status,
+        currentLocation: alloc.currentLocation,
+        deliveryDestination: alloc.deliveryDestination,
+        pickupLocation: alloc.pickupLocation,
+        routeInfo: alloc.routeInfo
+      }))
+    });
+    
+  } catch (error) {
+    console.error('❌ Driver tracking error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get route from driver location to Isuzu Pasig (using Google Maps API)
+app.post('/api/directions/route', async (req, res) => {
+  try {
+    const { origin, destination, waypoints } = req.body;
+    
+    if (!origin || !destination) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Origin and destination are required' 
+      });
+    }
+    
+    const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyAT5fZoyDVluzfdq4Rz2uuVJDocqBLDTGo';
+    
+    let directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?` +
+      `origin=${encodeURIComponent(origin)}&` +
+      `destination=${encodeURIComponent(destination)}&` +
+      `mode=driving&` +
+      `key=${GOOGLE_MAPS_API_KEY}`;
+    
+    if (waypoints && waypoints.length > 0) {
+      directionsUrl += `&waypoints=${encodeURIComponent(waypoints.join('|'))}`;
+    }
+    
+    const response = await fetch(directionsUrl);
+    const data = await response.json();
+    
+    if (data.status !== 'OK') {
+      return res.status(400).json({
+        success: false,
+        error: `Google Directions API error: ${data.status}`,
+        message: data.error_message || 'Unable to calculate route'
+      });
+    }
+    
+    const route = data.routes[0];
+    const leg = route.legs[0];
+    
+    res.json({
+      success: true,
+      route: {
+        distance: leg.distance,
+        duration: leg.duration,
+        start_address: leg.start_address,
+        end_address: leg.end_address,
+        steps: leg.steps,
+        overview_polyline: route.overview_polyline.points
+      },
+      summary: {
+        distance_text: leg.distance.text,
+        duration_text: leg.duration.text,
+        distance_meters: leg.distance.value,
+        duration_seconds: leg.duration.value
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Directions error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get route for specific driver to their delivery destination
+app.get('/api/directions/driver/:driverName', async (req, res) => {
+  try {
+    const { driverName } = req.params;
+    
+    const allocation = await DriverAllocation.findOne({ assignedDriver: driverName });
+    
+    if (!allocation) {
+      return res.status(404).json({
+        success: false,
+        error: 'No allocation found for this driver'
+      });
+    }
+    
+    const { currentLocation, deliveryDestination } = allocation;
+    
+    if (!currentLocation?.latitude || !currentLocation?.longitude) {
+      return res.status(400).json({
+        success: false,
+        error: 'Driver location not available. Please enable GPS tracking.'
+      });
+    }
+    
+    // Use Google Maps API for route calculation
+    const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || 'AIzaSyAT5fZoyDVluzfdq4Rz2uuVJDocqBLDTGo';
+    
+    const origin = `${currentLocation.latitude},${currentLocation.longitude}`;
+    const destination = `${deliveryDestination.latitude},${deliveryDestination.longitude}`;
+    
+    const directionsUrl = `https://maps.googleapis.com/maps/api/directions/json?` +
+      `origin=${origin}&` +
+      `destination=${destination}&` +
+      `mode=driving&` +
+      `key=${GOOGLE_MAPS_API_KEY}`;
+    
+    const response = await fetch(directionsUrl);
+    const data = await response.json();
+    
+    if (data.status !== 'OK') {
+      return res.status(400).json({
+        success: false,
+        error: `Unable to calculate route: ${data.status}`
+      });
+    }
+    
+    const route = data.routes[0];
+    const leg = route.legs[0];
+    
+    // Update route info in database
+    await DriverAllocation.updateOne(
+      { _id: allocation._id },
+      {
+        $set: {
+          'routeInfo.distance': leg.distance.value,
+          'routeInfo.estimatedDuration': leg.duration.value
+        }
+      }
+    );
+    
+    res.json({
+      success: true,
+      driver: driverName,
+      vehicle: allocation.unitId,
+      route: {
+        distance: leg.distance,
+        duration: leg.duration,
+        start_address: leg.start_address,
+        end_address: leg.end_address,
+        steps: leg.steps,
+        overview_polyline: route.overview_polyline.points
+      },
+      locations: {
+        origin: currentLocation,
+        destination: deliveryDestination
+      }
+    });
+    
+  } catch (error) {
+    console.error('❌ Driver route error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ================== START SERVER ==================
 const PORT = process.env.PORT || 5000;
 const localIPs = getLocalIPAddresses();
@@ -1156,6 +1389,10 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('  - DELETE /api/dispatch/assignments/:id');
   console.log('  - GET  /test');
   console.log('  - GET  /health');
+  console.log('  - POST /api/tracking/update-location');
+  console.log('  - GET  /api/tracking/driver/:driverName');
+  console.log('  - POST /api/directions/route');
+  console.log('  - GET  /api/directions/driver/:driverName');
   console.log('');
   console.log('✅ Ready for mobile app connections!');
   console.log('💡 Use the Primary IP for connecting from other devices on the same network');
