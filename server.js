@@ -217,6 +217,7 @@ app.get('/getAllocation', allocationController.getAllocation);
 // Create Allocation - Enhanced with better validation  
 app.post('/createAllocation', async (req, res) => {
   try {
+<<<<<<< HEAD
     const { unitName, unitId, bodyColor, variation, assignedDriver, assignedAgent, processesToBeDone, allocatedBy } = req.body;
     
     console.log('📝 Creating allocation:', { unitName, unitId, assignedDriver, assignedAgent });
@@ -249,6 +250,32 @@ app.post('/createAllocation', async (req, res) => {
       }
     }
     
+=======
+    const { unitName, unitId, bodyColor, variation, assignedDriver, status, allocatedBy, pickupLocation, deliveryLocation } = req.body;
+
+    // Helper to convert string location to schema object
+    function locationObj(address) {
+      if (!address) return {};
+      // Quick mapping for known locations
+      if (address === 'Isuzu Pasig Dealership' || address === 'Isuzu Pasig') {
+        return {
+          address: 'Isuzu Pasig Dealership, Metro Manila',
+          latitude: 14.5791,
+          longitude: 121.0655
+        };
+      }
+      if (address === 'Isuzu Philippines HQ' || address === 'Isuzu Philippines') {
+        return {
+          address: 'Isuzu Philippines HQ, Metro Manila',
+          latitude: 14.5556,
+          longitude: 121.0206
+        };
+      }
+      // Otherwise, just save address string
+      return { address };
+    }
+
+>>>>>>> 10a21a2 (Update backend: ensure all routes are connected and ready for deployment)
     const newAllocation = new DriverAllocation({
       unitName,
       unitId: unitId || `UNIT_${Date.now()}`,
@@ -259,11 +286,17 @@ app.post('/createAllocation', async (req, res) => {
       processesToBeDone: processesToBeDone || [],
       status: 'In Progress',
       allocatedBy: allocatedBy || 'Admin',
-      date: new Date()
+      date: new Date(),
+      pickupLocation: locationObj(pickupLocation),
+      deliveryDestination: locationObj(deliveryLocation)
     });
 
     await newAllocation.save();
+<<<<<<< HEAD
     console.log('✅ Created allocation:', newAllocation.unitName, 'for driver:', assignedDriver);
+=======
+    console.log('✅ Created allocation:', newAllocation.unitName, 'Pickup:', pickupLocation, 'Delivery:', deliveryLocation);
+>>>>>>> 10a21a2 (Update backend: ensure all routes are connected and ready for deployment)
     res.json({ success: true, message: 'Allocation created successfully', data: newAllocation });
   } catch (error) {
     console.error('❌ Create allocation error:', error);
@@ -271,6 +304,7 @@ app.post('/createAllocation', async (req, res) => {
   }
 });
 
+<<<<<<< HEAD
 // Create Service Request
 app.post('/createRequest', async (req, res) => {
   try {
@@ -281,11 +315,70 @@ app.post('/createRequest', async (req, res) => {
     res.json({ success: true, message: 'Service request created successfully', data: newRequest });
   } catch (error) {
     console.error('❌ Create service request error:', error);
+=======
+// Get Stock/Inventory
+app.post('/createAllocation', async (req, res) => {
+  try {
+    const { unitName, unitId, bodyColor, variation, assignedDriver, status, allocatedBy, pickupLocation, deliveryLocation } = req.body;
+    function locationObj(address) {
+      if (!address) return {};
+      if (address === 'Isuzu Pasig Dealership' || address === 'Isuzu Pasig') {
+        return {
+          address: 'Isuzu Pasig Dealership, Metro Manila',
+          latitude: 14.5791,
+          longitude: 121.0655
+        };
+      }
+      if (address === 'Isuzu Philippines HQ' || address === 'Isuzu Philippines') {
+        return {
+          address: 'Isuzu Philippines HQ, Metro Manila',
+          latitude: 14.5556,
+          longitude: 121.0206
+        };
+      }
+      return { address };
+    }
+    const newAllocation = new DriverAllocation({
+      unitName,
+      unitId,
+      bodyColor,
+      variation,
+      assignedDriver,
+      status: status || 'Pending',
+      allocatedBy: allocatedBy || 'Admin',
+      date: new Date(),
+      pickupLocation: locationObj(pickupLocation),
+      deliveryDestination: locationObj(deliveryLocation)
+    });
+    await newAllocation.save();
+    // Send notification to driver/agent (stub)
+    console.log(`🔔 Notification: Assignment created for driver ${assignedDriver}`);
+    res.json({ success: true, message: 'Allocation created successfully', data: newAllocation });
+  } catch (error) {
+    console.error('❌ Create allocation error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
 
-// Get Completed Requests
+// Update assignment status
+app.put('/updateAllocationStatus/:id', async (req, res) => {
+  try {
+    const { status } = req.body;
+    const allocation = await DriverAllocation.findById(req.params.id);
+    if (!allocation) {
+      return res.status(404).json({ success: false, message: 'Allocation not found' });
+    }
+    allocation.status = status;
+    await allocation.save();
+    // Send notification to driver/agent (stub)
+    console.log(`� Notification: Assignment status updated for driver ${allocation.assignedDriver} to ${status}`);
+    res.json({ success: true, message: 'Status updated', data: allocation });
+  } catch (error) {
+    console.error('❌ Update allocation status error:', error);
+>>>>>>> 10a21a2 (Update backend: ensure all routes are connected and ready for deployment)
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
 app.get('/getCompletedRequests', async (req, res) => {
   try {
     const completed = await CompletedRequest.find({}).sort({ completedAt: -1 });
