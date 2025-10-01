@@ -350,12 +350,16 @@ app.post('/login', async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
+    // Normalize user data for response
+    const normalizedRole = user.role ? user.role.toLowerCase() : 'salesAgent';
+    const normalizedAccountName = user.accountName || user.name || 'Unknown User';
+
     // Create session
     const sessionUser = {
       id: user._id,
       username: user.username,
-      role: user.role,
-      accountName: user.accountName,
+      role: normalizedRole,
+      accountName: normalizedAccountName,
       assignedTo: user.assignedTo
     };
 
@@ -363,8 +367,8 @@ app.post('/login', async (req, res) => {
 
     const response = {
       success: true,
-      role: user.role,
-      accountName: user.accountName,
+      role: normalizedRole,
+      accountName: normalizedAccountName,
       user: sessionUser
     };
 
@@ -536,8 +540,38 @@ app.post('/logout', (req, res) => {
 app.get('/getUsers', async (req, res) => {
   try {
     const users = await User.find({}).select('-password -temporaryPassword');
-    console.log(`📊 Found ${users.length} users`);
-    res.json({ success: true, data: users });
+    
+    // Normalize user data for consistency
+    const normalizedUsers = users.map(user => {
+      const userObj = user.toObject();
+      
+      // Normalize role to lowercase
+      if (userObj.role) {
+        userObj.role = userObj.role.toLowerCase();
+      }
+      
+      // Ensure accountName field exists (fallback to name field if needed)
+      if (!userObj.accountName && userObj.name) {
+        userObj.accountName = userObj.name;
+      }
+      
+      // Ensure consistent field structure
+      return {
+        _id: userObj._id,
+        username: userObj.username,
+        role: userObj.role || 'salesAgent',
+        accountName: userObj.accountName || userObj.name || 'Unknown User',
+        email: userObj.email,
+        phoneno: userObj.phoneno,
+        assignedTo: userObj.assignedTo,
+        lastLogin: userObj.lastLogin,
+        createdAt: userObj.createdAt,
+        updatedAt: userObj.updatedAt
+      };
+    });
+    
+    console.log(`📊 Found ${normalizedUsers.length} users`);
+    res.json({ success: true, data: normalizedUsers });
   } catch (error) {
     console.error('❌ Get users error:', error);
     res.status(500).json({ success: false, error: error.message });
