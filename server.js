@@ -350,9 +350,20 @@ app.post('/login', async (req, res) => {
     user.lastLogin = new Date();
     await user.save();
 
-    // Normalize user data for response
-    const normalizedRole = user.role ? user.role.toLowerCase() : 'salesAgent';
-    const normalizedAccountName = user.accountName || user.name || 'Unknown User';
+    // Safely normalize user data for response
+    let normalizedRole = 'salesagent'; // default fallback
+    if (user.role) {
+      normalizedRole = user.role.toLowerCase();
+    }
+
+    let normalizedAccountName = 'Unknown User'; // default fallback
+    if (user.accountName) {
+      normalizedAccountName = user.accountName;
+    } else if (user.name) {
+      normalizedAccountName = user.name;
+    } else if (user.username) {
+      normalizedAccountName = user.username;
+    }
 
     // Create session
     const sessionUser = {
