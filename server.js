@@ -559,10 +559,20 @@ app.post('/createUser', async (req, res) => {
     const saltRounds = 10;
     const hashedPassword = await bcrypt.hash(password, saltRounds);
     
+    // Normalize role to match schema enum
+    let normalizedRole = 'salesAgent'; // default
+    if (role) {
+      const roleLower = role.toLowerCase().replace(/\s+/g, '');
+      if (roleLower === 'admin') normalizedRole = 'admin';
+      else if (roleLower === 'supervisor') normalizedRole = 'supervisor';
+      else if (roleLower === 'manager') normalizedRole = 'manager';
+      else if (roleLower.includes('sales') || roleLower.includes('agent')) normalizedRole = 'salesAgent';
+    }
+    
     const newUser = new User({
       username: username.toLowerCase(),
       password: hashedPassword,
-      role: role || 'salesAgent',
+      role: normalizedRole,
       accountName,
       email
     });
