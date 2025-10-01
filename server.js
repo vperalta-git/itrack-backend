@@ -34,8 +34,10 @@ app.use(express.json());
 const API_CONFIG = {
   // Development Mobile Backend (current)
   MOBILE_BACKEND: {
-    BASE_URL: 'http://192.168.254.147:5000',
-    NAME: 'Mobile Development Backend'
+    config: {
+      BASE_URL: 'http://192.168.254.161:5000',
+      NAME: 'Mobile Development Backend'
+    }
   },
   
   // Production Render Backend
