@@ -200,7 +200,7 @@ mongoose.connect(mongoURI)
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true },
   password: { type: String, required: true },
-  role: { type: String, enum: ['admin', 'supervisor', 'manager', 'salesAgent', 'agent', 'dispatch', 'driver'], default: 'salesAgent' },
+  role: { type: String, enum: ['admin', 'supervisor', 'manager', 'salesAgent', 'salesagent', 'agent', 'dispatch', 'driver'], default: 'salesAgent' },
   accountName: { type: String, required: true },
   email: { type: String, required: false }, // For password reset functionality
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
