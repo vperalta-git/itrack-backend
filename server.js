@@ -532,32 +532,6 @@ app.post('/logout', (req, res) => {
 
 // ========== USER MANAGEMENT ENDPOINTS ==========
 
-// Test endpoint to check user data
-app.get('/test-user/:username', async (req, res) => {
-  try {
-    const user = await User.findOne({ username: req.params.username.toLowerCase() });
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-    
-    res.json({
-      success: true,
-      user: {
-        _id: user._id,
-        username: user.username,
-        role: user.role,
-        accountName: user.accountName,
-        name: user.name,
-        hasPassword: !!user.password,
-        hasTemporaryPassword: !!user.temporaryPassword,
-        fields: Object.keys(user.toObject())
-      }
-    });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
 // Get all users
 app.get('/getUsers', async (req, res) => {
   try {
