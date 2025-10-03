@@ -131,6 +131,36 @@ CompletedRequestSchema.pre('save', function(next) {
   next();
 });
 
+// ================== AUDIT TRAIL SCHEMA ==================
+const AuditTrailSchema = new mongoose.Schema({
+  action: { type: String, required: true },
+  performedBy: { type: String, required: true },
+  targetUser: { type: String },
+  targetResource: { type: String },
+  details: { type: String },
+  timestamp: { type: Date, default: Date.now },
+  ipAddress: { type: String },
+  userAgent: { type: String }
+}, { collection: 'audittrails' });
+
+// ================== IN PROGRESS REQUESTS SCHEMA ==================
+const InProgressRequestSchema = new mongoose.Schema({
+  vehicleRegNo: { type: String, required: true },
+  unitName: { type: String },
+  service: [String],
+  status: { type: String, default: 'In Progress' },
+  preparedBy: { type: String, required: true },
+  startedAt: { type: Date, default: Date.now },
+  estimatedCompletion: { type: Date },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+}, { collection: 'inprogressrequests' });
+
+InProgressRequestSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
+});
+
 // Dispatch Assignment Schema
 const DispatchAssignmentSchema = new mongoose.Schema({
   vehicleId: { type: mongoose.Schema.Types.ObjectId, ref: 'VehicleStock' },
@@ -215,6 +245,8 @@ const VehicleStock = mongoose.model('VehicleStock', VehicleStockSchema);
 const VehiclePreparation = mongoose.model('VehiclePreparation', VehiclePreparationSchema);
 const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema);
 const CompletedRequest = mongoose.model('CompletedRequest', CompletedRequestSchema);
+const AuditTrail = mongoose.model('AuditTrail', AuditTrailSchema);
+const InProgressRequest = mongoose.model('InProgressRequest', InProgressRequestSchema);
 const DispatchAssignment = mongoose.model('DispatchAssignment', DispatchAssignmentSchema);
 
 // ================== ROUTES ==================
@@ -304,6 +336,84 @@ app.get('/driver-allocations', async (req, res) => {
     res.json({ success: true, data: allocations });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get all allocations (History Screen compatibility)
+app.get('/getAllocation', async (req, res) => {
+  try {
+    const allocations = await DriverAllocation.find({}).sort({ createdAt: -1 });
+    console.log(`📊 Found ${allocations.length} allocations for history`);
+    res.json({ success: true, data: allocations });
+  } catch (error) {
+    console.error('❌ Get allocations error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ================== HISTORY ENDPOINTS ==================
+
+// Get In Progress Requests
+app.get('/getRequest', async (req, res) => {
+  try {
+    console.log('📋 Fetching in-progress requests...');
+    const inProgressRequests = await InProgressRequest.find()
+      .sort({ createdAt: -1 });
+    
+    console.log(`📊 Found ${inProgressRequests.length} in-progress requests`);
+    res.json({ 
+      success: true, 
+      data: inProgressRequests 
+    });
+  } catch (error) {
+    console.error('❌ Error fetching in-progress requests:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get Audit Trail
+app.get('/api/audit-trail', async (req, res) => {
+  try {
+    console.log('📋 Fetching audit trail...');
+    const auditTrail = await AuditTrail.find()
+      .sort({ timestamp: -1 })
+      .limit(100); // Limit to recent 100 entries
+    
+    console.log(`📊 Found ${auditTrail.length} audit trail entries`);
+    res.json({ 
+      success: true, 
+      data: auditTrail 
+    });
+  } catch (error) {
+    console.error('❌ Error fetching audit trail:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Alternative getRequest endpoint
+app.get('/api/getRequest', async (req, res) => {
+  try {
+    console.log('📋 Fetching service requests (API)...');
+    const inProgressRequests = await InProgressRequest.find()
+      .sort({ createdAt: -1 });
+    
+    console.log(`📊 Found ${inProgressRequests.length} service requests`);
+    res.json({ 
+      success: true, 
+      data: inProgressRequests 
+    });
+  } catch (error) {
+    console.error('❌ Error fetching service requests:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
   }
 });
 
@@ -739,8 +849,12 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('  - GET  /test');
   console.log('  - POST /login');
   console.log('  - POST /admin/create-user');
+  console.log('  - GET  /admin/users');
   console.log('  - GET  /vehicles');
   console.log('  - GET  /driver-allocations');
+  console.log('  - GET  /getAllocation');
+  console.log('  - GET  /getRequest');
+  console.log('  - GET  /api/audit-trail');
   console.log('  - GET  /getCompletedRequests');
   console.log('  - GET  /api/service-requests');
   console.log('  - POST /api/service-requests');
