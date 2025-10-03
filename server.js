@@ -435,6 +435,48 @@ app.get('/api/getRequest', async (req, res) => {
   }
 });
 
+// Get Completed Requests (Web & Mobile)
+app.get('/api/getCompletedRequests', async (req, res) => {
+  try {
+    const completedRequests = await ServiceRequest.find({ 
+      status: 'Completed' 
+    }).sort({ completedAt: -1 });
+    console.log(`✅ Retrieved ${completedRequests.length} completed requests`);
+    res.json({ success: true, data: completedRequests });
+  } catch (error) {
+    console.error('❌ Get completed requests error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get Completed Requests (Alternative endpoint for compatibility)
+app.get('/getCompletedRequests', async (req, res) => {
+  try {
+    const completedRequests = await ServiceRequest.find({ 
+      status: 'Completed' 
+    }).sort({ completedAt: -1 });
+    console.log(`✅ Retrieved ${completedRequests.length} completed requests`);
+    res.json({ success: true, data: completedRequests });
+  } catch (error) {
+    console.error('❌ Get completed requests error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get Completed Requests (Mobile fallback)
+app.get('/getCompletedRequests', async (req, res) => {
+  try {
+    const completedRequests = await ServiceRequest.find({ 
+      status: 'Completed' 
+    }).sort({ completedAt: -1 });
+    console.log(`✅ Mobile Retrieved ${completedRequests.length} completed requests`);
+    res.json({ success: true, data: completedRequests });
+  } catch (error) {
+    console.error('❌ Mobile Get completed requests error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ================== DASHBOARD STATS ==================
 
 app.get('/dashboard/stats', async (req, res) => {
