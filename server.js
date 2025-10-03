@@ -302,6 +302,116 @@ app.get('/api/getAllocation', async (req, res) => {
   }
 });
 
+// ================== ALLOCATION CREATION & UPDATES ==================
+
+// Create Driver Allocation (Mobile & Web)
+app.post('/createAllocation', async (req, res) => {
+  try {
+    const allocationData = req.body;
+    console.log('🚛 Creating driver allocation:', allocationData);
+    
+    // Create new allocation
+    const newAllocation = new DriverAllocation(allocationData);
+    await newAllocation.save();
+    
+    console.log(`✅ Driver allocation created: ${newAllocation._id}`);
+    res.json({ 
+      success: true, 
+      message: 'Driver allocation created successfully',
+      data: newAllocation 
+    });
+  } catch (error) {
+    console.error('❌ Create allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create Driver Allocation (API version)
+app.post('/api/createAllocation', async (req, res) => {
+  try {
+    const allocationData = req.body;
+    console.log('🚛 API Creating driver allocation:', allocationData);
+    
+    // Create new allocation
+    const newAllocation = new DriverAllocation(allocationData);
+    await newAllocation.save();
+    
+    console.log(`✅ API Driver allocation created: ${newAllocation._id}`);
+    res.json({ 
+      success: true, 
+      message: 'Driver allocation created successfully',
+      data: newAllocation 
+    });
+  } catch (error) {
+    console.error('❌ API Create allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update Inventory Stock Status
+app.put('/updateStock/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    console.log(`📦 Updating stock ${id}:`, updateData);
+    
+    const updatedItem = await Inventory.findByIdAndUpdate(
+      id, 
+      updateData, 
+      { new: true }
+    );
+    
+    if (!updatedItem) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Inventory item not found' 
+      });
+    }
+    
+    console.log(`✅ Stock updated: ${updatedItem._id}`);
+    res.json({ 
+      success: true, 
+      message: 'Stock updated successfully',
+      data: updatedItem 
+    });
+  } catch (error) {
+    console.error('❌ Update stock error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update Inventory Stock Status (API version)
+app.put('/api/updateStock/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    console.log(`📦 API Updating stock ${id}:`, updateData);
+    
+    const updatedItem = await Inventory.findByIdAndUpdate(
+      id, 
+      updateData, 
+      { new: true }
+    );
+    
+    if (!updatedItem) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Inventory item not found' 
+      });
+    }
+    
+    console.log(`✅ API Stock updated: ${updatedItem._id}`);
+    res.json({ 
+      success: true, 
+      message: 'Stock updated successfully',
+      data: updatedItem 
+    });
+  } catch (error) {
+    console.error('❌ API Update stock error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ================== LOCATION TRACKING ROUTES (FIXED) ==================
 
 // Update driver location
@@ -473,6 +583,129 @@ app.get('/getCompletedRequests', async (req, res) => {
     res.json({ success: true, data: completedRequests });
   } catch (error) {
     console.error('❌ Mobile Get completed requests error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ================== DISPATCH ASSIGNMENT ENDPOINTS ==================
+
+// Create Dispatch Assignment Schema
+const DispatchAssignmentSchema = new mongoose.Schema({
+  unitName: { type: String, required: true },
+  unitId: { type: String, required: true },
+  bodyColor: String,
+  variation: String,
+  status: { 
+    type: String, 
+    enum: ['Assigned to Dispatch', 'In Progress', 'Ready for Release', 'Released'],
+    default: 'Assigned to Dispatch' 
+  },
+  processes: [String], // Array of process names
+  processStatus: {
+    type: Map,
+    of: Boolean,
+    default: {}
+  },
+  assignedBy: String,
+  assignedTo: String, // Dispatch personnel
+  createdAt: { type: Date, default: Date.now },
+  completedAt: Date,
+  notes: [String]
+});
+
+const DispatchAssignment = mongoose.model('DispatchAssignment', DispatchAssignmentSchema, 'dispatchassignments');
+
+// Get Dispatch Assignments
+app.get('/api/dispatch/assignments', async (req, res) => {
+  try {
+    const assignments = await DispatchAssignment.find({}).sort({ createdAt: -1 });
+    console.log(`🚐 Retrieved ${assignments.length} dispatch assignments`);
+    res.json({ success: true, data: assignments });
+  } catch (error) {
+    console.error('❌ Get dispatch assignments error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create Dispatch Assignment
+app.post('/api/dispatch/assignments', async (req, res) => {
+  try {
+    const assignmentData = req.body;
+    console.log('🚐 Creating dispatch assignment:', assignmentData);
+    
+    // Initialize process status map
+    if (assignmentData.processes && assignmentData.processes.length > 0) {
+      assignmentData.processStatus = {};
+      assignmentData.processes.forEach(process => {
+        assignmentData.processStatus[process] = false;
+      });
+    }
+    
+    const newAssignment = new DispatchAssignment(assignmentData);
+    await newAssignment.save();
+    
+    console.log(`✅ Dispatch assignment created: ${newAssignment._id}`);
+    res.json({ 
+      success: true, 
+      message: 'Dispatch assignment created successfully',
+      data: newAssignment 
+    });
+  } catch (error) {
+    console.error('❌ Create dispatch assignment error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update Dispatch Assignment Process Status
+app.patch('/api/dispatch/assignments/:id/process', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { processName, completed } = req.body;
+    
+    const assignment = await DispatchAssignment.findById(id);
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found' });
+    }
+    
+    assignment.processStatus.set(processName, completed);
+    await assignment.save();
+    
+    console.log(`🔄 Updated process ${processName} for assignment ${id}: ${completed}`);
+    res.json({ 
+      success: true, 
+      message: 'Process status updated',
+      data: assignment 
+    });
+  } catch (error) {
+    console.error('❌ Update dispatch process error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update Dispatch Assignment Status
+app.patch('/api/dispatch/assignments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    const assignment = await DispatchAssignment.findByIdAndUpdate(
+      id, 
+      updateData, 
+      { new: true }
+    );
+    
+    if (!assignment) {
+      return res.status(404).json({ success: false, message: 'Assignment not found' });
+    }
+    
+    console.log(`✅ Dispatch assignment updated: ${assignment._id}`);
+    res.json({ 
+      success: true, 
+      message: 'Assignment updated successfully',
+      data: assignment 
+    });
+  } catch (error) {
+    console.error('❌ Update dispatch assignment error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
