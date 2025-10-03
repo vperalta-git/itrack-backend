@@ -1370,7 +1370,7 @@ app.post('/api/tracking/update-location', async (req, res) => {
 app.get('/api/tracking/live-locations', async (req, res) => {
   try {
     const allocations = await DriverAllocation.find({
-      status: { $in: ['Assigned', 'In Transit', 'On Route'] },
+      status: { $in: ['Assigned', 'In Transit', 'On Route', 'Assigned to Dispatch', 'Ready for Delivery'] },
       'location.latitude': { $exists: true },
       'location.longitude': { $exists: true }
     }).select({
