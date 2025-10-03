@@ -384,7 +384,7 @@ app.get('/api/tracking/live-locations', async (req, res) => {
   }
 });
 
-// Get location history for specific vehicle
+// Get location history for specific vehicle (FIXED route parameter)
 app.get('/api/tracking/history/:unitId', async (req, res) => {
   try {
     const unitId = req.params.unitId;
