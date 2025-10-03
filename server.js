@@ -279,6 +279,25 @@ const DriverAllocationSchema = new mongoose.Schema({
     isComplete: { type: Boolean, default: false }
   },
   
+  // Real-time location tracking
+  location: {
+    latitude: { type: Number, min: -90, max: 90 },
+    longitude: { type: Number, min: -180, max: 180 },
+    address: String,
+    lastUpdated: { type: Date, default: Date.now },
+    speed: { type: Number, default: 0 },
+    heading: { type: Number, default: 0 }
+  },
+  
+  // Location history for tracking
+  locationHistory: [{
+    latitude: { type: Number, required: true },
+    longitude: { type: Number, required: true },
+    timestamp: { type: Date, default: Date.now },
+    speed: { type: Number, default: 0 },
+    heading: { type: Number, default: 0 }
+  }],
+  
   // Release management
   readyForRelease: { type: Boolean, default: false },
   releasedAt: Date,
@@ -1290,6 +1309,159 @@ app.put('/api/inventory/:id', async (req, res) => {
   }
 });
 
+// ========== REAL-TIME LOCATION TRACKING ==========
+
+// Update driver location (from mobile app)
+app.post('/api/tracking/update-location', async (req, res) => {
+  try {
+    const { driverName, latitude, longitude, speed = 0, heading = 0 } = req.body;
+    
+    if (!driverName || !latitude || !longitude) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Driver name, latitude, and longitude are required' 
+      });
+    }
+    
+    console.log(`📍 Location update from driver ${driverName}: ${latitude}, ${longitude}`);
+    
+    // Update all allocations for this driver
+    const updateResult = await DriverAllocation.updateMany(
+      { assignedDriver: driverName },
+      {
+        $set: {
+          'location.latitude': latitude,
+          'location.longitude': longitude,
+          'location.lastUpdated': new Date(),
+          'location.speed': speed,
+          'location.heading': heading
+        },
+        $push: {
+          locationHistory: {
+            latitude,
+            longitude,
+            timestamp: new Date(),
+            speed,
+            heading
+          }
+        }
+      }
+    );
+    
+    console.log(`✅ Updated ${updateResult.modifiedCount} allocations for driver ${driverName}`);
+    
+    res.json({
+      success: true,
+      message: `Location updated for driver ${driverName}`,
+      updatedAllocations: updateResult.modifiedCount,
+      location: { latitude, longitude, speed, heading }
+    });
+  } catch (error) {
+    console.error('❌ Location update error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to update location',
+      details: error.message 
+    });
+  }
+});
+
+// Get live driver locations (for website dashboard)
+app.get('/api/tracking/live-locations', async (req, res) => {
+  try {
+    const allocations = await DriverAllocation.find({
+      status: { $in: ['Assigned', 'In Transit', 'On Route'] },
+      'location.latitude': { $exists: true },
+      'location.longitude': { $exists: true }
+    }).select({
+      unitName: 1,
+      unitId: 1,
+      assignedDriver: 1,
+      status: 1,
+      bodyColor: 1,
+      variation: 1,
+      location: 1,
+      assignedAgent: 1
+    }).sort({ 'location.lastUpdated': -1 });
+    
+    console.log(`📍 Retrieved ${allocations.length} live vehicle locations`);
+    
+    const liveLocations = allocations.map(allocation => ({
+      _id: allocation._id,
+      unitName: allocation.unitName,
+      unitId: allocation.unitId,
+      assignedDriver: allocation.assignedDriver,
+      assignedAgent: allocation.assignedAgent,
+      status: allocation.status,
+      bodyColor: allocation.bodyColor,
+      variation: allocation.variation,
+      location: {
+        latitude: allocation.location?.latitude,
+        longitude: allocation.location?.longitude,
+        lastUpdated: allocation.location?.lastUpdated,
+        speed: allocation.location?.speed || 0,
+        heading: allocation.location?.heading || 0
+      }
+    }));
+    
+    res.json({
+      success: true,
+      data: liveLocations,
+      count: liveLocations.length,
+      lastUpdate: new Date()
+    });
+  } catch (error) {
+    console.error('❌ Get live locations error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get live locations',
+      details: error.message 
+    });
+  }
+});
+
+// Get location history for a specific driver/vehicle
+app.get('/api/tracking/history/:unitId', async (req, res) => {
+  try {
+    const { unitId } = req.params;
+    const { hours = 24 } = req.query; // Default to last 24 hours
+    
+    const allocation = await DriverAllocation.findOne({ unitId });
+    
+    if (!allocation) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Vehicle allocation not found' 
+      });
+    }
+    
+    // Filter location history by time range
+    const timeLimit = new Date(Date.now() - hours * 60 * 60 * 1000);
+    const locationHistory = allocation.locationHistory?.filter(
+      location => location.timestamp >= timeLimit
+    ) || [];
+    
+    console.log(`📍 Retrieved ${locationHistory.length} location history points for ${unitId}`);
+    
+    res.json({
+      success: true,
+      unitId,
+      unitName: allocation.unitName,
+      assignedDriver: allocation.assignedDriver,
+      data: locationHistory,
+      count: locationHistory.length,
+      timeRange: `${hours} hours`
+    });
+  } catch (error) {
+    console.error('❌ Get location history error:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to get location history',
+      details: error.message 
+    });
+  }
+});
+
 // ========== RELEASE MANAGEMENT ==========
 
 // Get releases
@@ -1455,6 +1627,11 @@ app.get('/api/config', (req, res) => {
         getDriverAllocations: '/driver-allocations',
         createDriverAllocation: '/driver-allocations',
         updateDriverAllocation: '/driver-allocations/:id',
+        
+        // Real-time Location Tracking
+        updateDriverLocation: '/api/tracking/update-location',
+        getLiveLocations: '/api/tracking/live-locations',
+        getLocationHistory: '/api/tracking/history/:unitId',
         
         // Health & Config
         health: '/test',
