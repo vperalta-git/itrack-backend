@@ -103,12 +103,119 @@ const DriverAllocationSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
+// ================== COMPLETED REQUEST SCHEMA ==================
+const CompletedRequestSchema = new mongoose.Schema({
+  vehicleRegNo: { type: String, required: true },
+  unitName: { type: String },
+  service: [{
+    type: String,
+    enum: ['Tinting', 'Carwash', 'Ceramic Coating', 'Accessories', 'Rust Proof'],
+    required: true
+  }],
+  status: { 
+    type: String,
+    enum: ['In Progress', 'Completed'],
+    default: 'Completed'
+  },
+  preparedBy: { type: String, required: true },
+  dateCreated: { type: String }, // Original format preservation
+  inProgressAt: { type: Date },
+  completedAt: { type: Date },
+  serviceDurationMinutes: { type: Number },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now }
+}, { collection: 'completedrequests' });
+
+CompletedRequestSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
+});
+
+// Dispatch Assignment Schema
+const DispatchAssignmentSchema = new mongoose.Schema({
+  vehicleId: { type: mongoose.Schema.Types.ObjectId, ref: 'VehicleStock' },
+  unitName: { type: String, required: true },
+  unitId: { type: String, required: true },
+  bodyColor: { type: String, required: true },
+  variation: { type: String, required: true },
+  
+  // Dispatch Process Management
+  processes: [{
+    type: String,
+    enum: ['tinting', 'carwash', 'ceramic_coating', 'accessories', 'rust_proof'],
+    required: true
+  }],
+  
+  // Process Status Tracking
+  processStatus: {
+    tinting: { type: Boolean, default: false },
+    carwash: { type: Boolean, default: false },
+    ceramic_coating: { type: Boolean, default: false },
+    accessories: { type: Boolean, default: false },
+    rust_proof: { type: Boolean, default: false }
+  },
+  
+  // Dispatch Status Workflow
+  status: {
+    type: String,
+    enum: [
+      'Assigned to Dispatch',
+      'In Process',
+      'Awaiting Dispatch', 
+      'In Transit',
+      'Arrived at Dealership',
+      'Under Preparation',
+      'Ready for Release',
+      'Released to Customer',
+      'Completed'
+    ],
+    default: 'Assigned to Dispatch'
+  },
+  
+  // Assignment Information
+  assignedBy: { type: String, required: true },
+  assignedAt: { type: Date, default: Date.now },
+  assignedTo: { type: String, default: null },
+  
+  // Progress Tracking
+  processCompletedBy: { type: String, default: null },
+  processCompletedAt: { type: Date, default: null },
+  
+  // Notes and Communication
+  notes: [{
+    author: { type: String, required: true },
+    message: { type: String, required: true },
+    timestamp: { type: Date, default: Date.now },
+    processType: { type: String, default: null }
+  }],
+  
+  // Customer Information
+  customerInfo: {
+    name: { type: String, default: null },
+    contactNumber: { type: String, default: null },
+    email: { type: String, default: null },
+    address: { type: String, default: null }
+  },
+  
+  // Timestamps
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: { type: Date, default: Date.now },
+  completedAt: { type: Date, default: null }
+}, { collection: 'dispatchassignments' });
+
+DispatchAssignmentSchema.pre('save', function(next) {
+  this.updatedAt = new Date();
+  next();
+});
+
 // ================== MODELS ==================
 const User = mongoose.model('User', UserSchema);
 const Vehicle = mongoose.model('Vehicle', VehicleSchema);
 const VehicleStock = mongoose.model('VehicleStock', VehicleStockSchema);
 const VehiclePreparation = mongoose.model('VehiclePreparation', VehiclePreparationSchema);
 const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema);
+const CompletedRequest = mongoose.model('CompletedRequest', CompletedRequestSchema);
+const DispatchAssignment = mongoose.model('DispatchAssignment', DispatchAssignmentSchema);
 
 // ================== ROUTES ==================
 
@@ -200,6 +307,388 @@ app.get('/driver-allocations', async (req, res) => {
   }
 });
 
+// ================== COMPLETED REQUESTS ENDPOINTS ==================
+
+// Get Completed Requests
+app.get('/getCompletedRequests', async (req, res) => {
+  try {
+    console.log('📋 Fetching completed requests...');
+    const completedRequests = await CompletedRequest.find({ status: 'Completed' })
+      .sort({ completedAt: -1 });
+    
+    console.log(`📊 Found ${completedRequests.length} completed requests`);
+    res.json({ 
+      success: true, 
+      data: completedRequests,
+      count: completedRequests.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching completed requests:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get All Service Requests (including in-progress)
+app.get('/api/service-requests', async (req, res) => {
+  try {
+    console.log('📋 Fetching all service requests...');
+    const serviceRequests = await CompletedRequest.find()
+      .sort({ createdAt: -1 });
+    
+    console.log(`📊 Found ${serviceRequests.length} service requests`);
+    res.json({ 
+      success: true, 
+      data: serviceRequests,
+      count: serviceRequests.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching service requests:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Create New Service Request
+app.post('/api/service-requests', async (req, res) => {
+  try {
+    const { vehicleRegNo, unitName, service, preparedBy } = req.body;
+    console.log('🚛 Creating service request for:', vehicleRegNo);
+    
+    if (!vehicleRegNo || !service || !preparedBy) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: vehicleRegNo, service, preparedBy'
+      });
+    }
+    
+    const newRequest = new CompletedRequest({
+      vehicleRegNo,
+      unitName,
+      service: Array.isArray(service) ? service : [service],
+      preparedBy,
+      status: 'In Progress',
+      inProgressAt: new Date(),
+      dateCreated: new Date().toString()
+    });
+    
+    await newRequest.save();
+    
+    console.log('✅ Service request created:', newRequest._id);
+    res.status(201).json({
+      success: true,
+      data: newRequest,
+      message: 'Service request created successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error creating service request:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Complete Service Request
+app.patch('/api/service-requests/:id/complete', async (req, res) => {
+  try {
+    const { serviceDurationMinutes } = req.body;
+    console.log('✅ Completing service request:', req.params.id);
+    
+    const request = await CompletedRequest.findById(req.params.id);
+    if (!request) {
+      return res.status(404).json({
+        success: false,
+        error: 'Service request not found'
+      });
+    }
+    
+    request.status = 'Completed';
+    request.completedAt = new Date();
+    
+    if (serviceDurationMinutes) {
+      request.serviceDurationMinutes = serviceDurationMinutes;
+    } else if (request.inProgressAt) {
+      const duration = Math.round((new Date() - request.inProgressAt) / (1000 * 60));
+      request.serviceDurationMinutes = duration;
+    }
+    
+    await request.save();
+    
+    console.log('✅ Service request completed');
+    res.json({
+      success: true,
+      data: request,
+      message: 'Service request completed successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error completing service request:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ================== DISPATCH ASSIGNMENT ENDPOINTS ==================
+
+// Get All Dispatch Assignments
+app.get('/api/dispatch/assignments', async (req, res) => {
+  try {
+    console.log('📋 Fetching dispatch assignments...');
+    const assignments = await DispatchAssignment.find()
+      .sort({ createdAt: -1 });
+    
+    console.log(`📊 Retrieved ${assignments.length} dispatch assignments`);
+    res.json({
+      success: true,
+      data: assignments,
+      count: assignments.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching dispatch assignments:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Create New Dispatch Assignment
+app.post('/api/dispatch/assignments', async (req, res) => {
+  try {
+    const { unitId, unitName, bodyColor, variation, processes, assignedBy } = req.body;
+    console.log('🚛 Creating dispatch assignment for:', unitId);
+    
+    // Validate required fields
+    if (!unitId || !unitName || !processes || !assignedBy) {
+      return res.status(400).json({
+        success: false,
+        error: 'Missing required fields: unitId, unitName, processes, assignedBy'
+      });
+    }
+    
+    // Check if vehicle already has an active dispatch assignment
+    const existingAssignment = await DispatchAssignment.findOne({
+      unitId: unitId,
+      status: { $nin: ['Completed', 'Released to Customer'] }
+    });
+    
+    if (existingAssignment) {
+      return res.status(400).json({
+        success: false,
+        error: 'Vehicle already has an active dispatch assignment'
+      });
+    }
+    
+    // Create new dispatch assignment
+    const newAssignment = new DispatchAssignment({
+      unitId,
+      unitName,
+      bodyColor,
+      variation,
+      processes,
+      assignedBy,
+      notes: [{
+        author: assignedBy,
+        message: `Vehicle assigned to dispatch for processes: ${processes.join(', ')}`,
+        timestamp: new Date()
+      }]
+    });
+    
+    await newAssignment.save();
+    
+    console.log('✅ Dispatch assignment created:', newAssignment._id);
+    res.status(201).json({
+      success: true,
+      data: newAssignment,
+      message: 'Dispatch assignment created successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error creating dispatch assignment:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Update Dispatch Assignment Status
+app.patch('/api/dispatch/assignments/:id/status', async (req, res) => {
+  try {
+    const { status, updatedBy, note } = req.body;
+    console.log('🔄 Updating dispatch assignment status:', req.params.id, 'to', status);
+    
+    const assignment = await DispatchAssignment.findById(req.params.id);
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Dispatch assignment not found'
+      });
+    }
+    
+    const oldStatus = assignment.status;
+    assignment.status = status;
+    
+    // Add note for status change
+    assignment.notes.push({
+      author: updatedBy || 'System',
+      message: note || `Status changed from ${oldStatus} to ${status}`,
+      timestamp: new Date()
+    });
+    
+    // Update completion tracking
+    if (status === 'Completed' || status === 'Released to Customer') {
+      assignment.completedAt = new Date();
+      assignment.processCompletedBy = updatedBy;
+      assignment.processCompletedAt = new Date();
+    }
+    
+    await assignment.save();
+    
+    console.log('✅ Dispatch assignment status updated');
+    res.json({
+      success: true,
+      data: assignment,
+      message: 'Status updated successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error updating dispatch assignment status:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Update Process Status (Individual Process Completion)
+app.patch('/api/dispatch/assignments/:id/process', async (req, res) => {
+  try {
+    const { processType, completed, completedBy } = req.body;
+    console.log('🔧 Updating process status:', processType, 'to', completed);
+    
+    const assignment = await DispatchAssignment.findById(req.params.id);
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Dispatch assignment not found'
+      });
+    }
+    
+    // Update process status
+    assignment.processStatus[processType] = completed;
+    
+    // Add note for process completion
+    assignment.notes.push({
+      author: completedBy || 'System',
+      message: `Process ${processType} ${completed ? 'completed' : 'marked incomplete'}`,
+      timestamp: new Date(),
+      processType: processType
+    });
+    
+    // Check if all processes are completed
+    const allCompleted = assignment.processes.every(
+      process => assignment.processStatus[process] === true
+    );
+    
+    if (allCompleted && assignment.status === 'In Process') {
+      assignment.status = 'Ready for Release';
+      assignment.processCompletedBy = completedBy;
+      assignment.processCompletedAt = new Date();
+      
+      assignment.notes.push({
+        author: 'System',
+        message: 'All processes completed - vehicle ready for release',
+        timestamp: new Date()
+      });
+    }
+    
+    await assignment.save();
+    
+    console.log('✅ Process status updated');
+    res.json({
+      success: true,
+      data: assignment,
+      message: 'Process status updated successfully'
+    });
+  } catch (error) {
+    console.error('❌ Error updating process status:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get Dispatch Assignment by ID
+app.get('/api/dispatch/assignments/:id', async (req, res) => {
+  try {
+    console.log('🔍 Fetching dispatch assignment:', req.params.id);
+    const assignment = await DispatchAssignment.findById(req.params.id);
+    
+    if (!assignment) {
+      return res.status(404).json({
+        success: false,
+        error: 'Dispatch assignment not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: assignment
+    });
+  } catch (error) {
+    console.error('❌ Error fetching dispatch assignment:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Get Dispatch Statistics
+app.get('/api/dispatch/stats', async (req, res) => {
+  try {
+    console.log('📊 Fetching dispatch statistics...');
+    
+    const totalAssignments = await DispatchAssignment.countDocuments();
+    const activeAssignments = await DispatchAssignment.countDocuments({
+      status: { $nin: ['Completed', 'Released to Customer'] }
+    });
+    const readyForRelease = await DispatchAssignment.countDocuments({
+      status: 'Ready for Release'
+    });
+    const inProcess = await DispatchAssignment.countDocuments({
+      status: 'In Process'
+    });
+    
+    const statusBreakdown = await DispatchAssignment.aggregate([
+      { $group: { _id: '$status', count: { $sum: 1 } } }
+    ]);
+    
+    res.json({
+      success: true,
+      stats: {
+        totalAssignments,
+        activeAssignments,
+        readyForRelease,
+        inProcess,
+        statusBreakdown
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching dispatch statistics:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // === DASHBOARD STATS ===
 app.get('/dashboard/stats', async (req, res) => {
   try {
@@ -211,12 +700,22 @@ app.get('/dashboard/stats', async (req, res) => {
       createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) },
     });
 
+    // Add completed requests data
+    const completedRequests = await CompletedRequest.countDocuments({ status: 'Completed' });
+    const inProgressRequests = await CompletedRequest.countDocuments({ status: 'In Progress' });
+    const recentCompletedRequests = await CompletedRequest.countDocuments({
+      completedAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
+    });
+
     res.json({
       totalStocks,
       finishedVehiclePreps,
       ongoingShipments,
       ongoingVehiclePreps,
       recentVehiclePreps,
+      completedRequests,
+      inProgressRequests,
+      recentCompletedRequests,
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -242,6 +741,11 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('  - POST /admin/create-user');
   console.log('  - GET  /vehicles');
   console.log('  - GET  /driver-allocations');
+  console.log('  - GET  /getCompletedRequests');
+  console.log('  - GET  /api/service-requests');
+  console.log('  - POST /api/service-requests');
+  console.log('  - GET  /api/dispatch/assignments');
+  console.log('  - POST /api/dispatch/assignments');
   console.log('  - GET  /dashboard/stats');
   console.log('✅ Server initialization complete!');
 });
