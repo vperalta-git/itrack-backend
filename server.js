@@ -103,75 +103,6 @@ const DriverAllocationSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// ================== ENHANCED DRIVER ALLOCATIONS SCHEMA ==================
-const EnhancedDriverAllocationSchema = new mongoose.Schema({
-  unitName: { type: String, required: true },
-  unitId: { type: String, required: true },
-  bodyColor: { type: String, required: true },
-  variation: { type: String },
-  model: { type: String },
-  assignedDriver: { type: String, required: true },
-  assignedAgent: { type: String },
-  assignedManager: { type: String },
-  assignedSupervisor: { type: String },
-  pickupLocation: {
-    address: String,
-    lat: Number,
-    lng: Number,
-    timestamp: Date
-  },
-  deliveryLocation: {
-    address: String,
-    lat: Number,
-    lng: Number,
-    timestamp: Date
-  },
-  currentLocation: {
-    lat: Number,
-    lng: Number,
-    timestamp: Date,
-    address: String
-  },
-  status: { 
-    type: String, 
-    enum: ['Assigned', 'In Transit', 'Delivered', 'Cancelled', 'On Hold'],
-    default: 'Assigned' 
-  },
-  priority: { 
-    type: String, 
-    enum: ['Low', 'Medium', 'High', 'Urgent'],
-    default: 'Medium' 
-  },
-  estimatedTimes: {
-    pickup: Date,
-    delivery: Date,
-    duration: Number // in minutes
-  },
-  actualTimes: {
-    pickup: Date,
-    delivery: Date,
-    duration: Number // in minutes
-  },
-  trackingVisibility: {
-    customer: { type: Boolean, default: true },
-    agent: { type: Boolean, default: true },
-    driver: { type: Boolean, default: true }
-  },
-  notes: [String],
-  locationHistory: [{
-    lat: Number,
-    lng: Number,
-    timestamp: Date,
-    address: String,
-    event: String // 'pickup', 'waypoint', 'delivery', 'update'
-  }],
-  vehicleAt: Date,
-  lastUpdate: { type: Date, default: Date.now }
-}, { 
-  timestamps: true,
-  collection: 'enhanceddriverallocations' // Use the exact collection name from MongoDB
-});
-
 // ================== COMPLETED REQUEST SCHEMA ==================
 const CompletedRequestSchema = new mongoose.Schema({
   vehicleRegNo: { type: String, required: true },
@@ -326,65 +257,15 @@ const InventoriesSchema = new mongoose.Schema({
     type: String, 
     enum: ['Available', 'Assigned to Dispatch', 'In Use', 'Reserved', 'Maintenance'],
     default: 'Available' 
-  }
+  },
+  // Driver assignment fields for allocation tracking
+  assignedDriver: { type: String },
+  assignedAgent: { type: String },
+  dateAssigned: { type: Date },
+  allocationId: { type: mongoose.Schema.Types.ObjectId, ref: 'DriverAllocation' }
 }, { 
   timestamps: true,
   collection: 'inventories' // Use the exact collection name from MongoDB
-});
-
-// ================== TEST DRIVES SCHEMA ==================
-const TestDriveSchema = new mongoose.Schema({
-  vehicleId: { type: mongoose.Schema.Types.ObjectId, required: true },
-  date: { type: String, required: true },
-  time: { type: String, required: true },
-  name: { type: String, required: true },
-  contact: { type: String, required: true },
-  status: { 
-    type: String, 
-    enum: ['Pending', 'Confirmed', 'In Progress', 'Completed', 'Cancelled', 'No Show'],
-    default: 'Pending' 
-  },
-  requestedBy: { type: String }, // Agent who requested
-  approvedBy: { type: String }, // Admin who approved
-  notes: { type: String }
-}, { 
-  timestamps: true,
-  collection: 'testdrives' // Use the exact collection name from MongoDB
-});
-
-// ================== NOTIFICATIONS SCHEMA ==================
-const NotificationSchema = new mongoose.Schema({
-  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
-  title: { type: String, required: true },
-  message: { type: String, required: true },
-  type: { 
-    type: String, 
-    enum: ['test_drive_request', 'test_drive_approved', 'test_drive_rejected', 'allocation_update', 'general'],
-    required: true 
-  },
-  data: {
-    testDriveId: mongoose.Schema.Types.ObjectId,
-    allocationId: mongoose.Schema.Types.ObjectId,
-    requestedBy: String,
-    customerName: String,
-    date: String,
-    time: String,
-    additionalInfo: mongoose.Schema.Types.Mixed
-  },
-  priority: { 
-    type: String, 
-    enum: ['low', 'medium', 'high', 'urgent'],
-    default: 'medium' 
-  },
-  isRead: { type: Boolean, default: false },
-  isDeleted: { type: Boolean, default: false },
-  readAt: Date,
-  actionTaken: String, // 'approved', 'rejected', 'completed', etc.
-  actionBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
-  actionAt: Date
-}, { 
-  timestamps: true,
-  collection: 'notifications'
 });
 
 // ================== MODELS ==================
@@ -393,36 +274,11 @@ const Vehicle = mongoose.model('Vehicle', VehicleSchema);
 const VehicleStock = mongoose.model('VehicleStock', VehicleStockSchema);
 const VehiclePreparation = mongoose.model('VehiclePreparation', VehiclePreparationSchema);
 const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema);
-const EnhancedDriverAllocation = mongoose.model('EnhancedDriverAllocation', EnhancedDriverAllocationSchema);
 const CompletedRequest = mongoose.model('CompletedRequest', CompletedRequestSchema);
 const AuditTrail = mongoose.model('AuditTrail', AuditTrailSchema);
 const InProgressRequest = mongoose.model('InProgressRequest', InProgressRequestSchema);
 const DispatchAssignment = mongoose.model('DispatchAssignment', DispatchAssignmentSchema);
 const Inventories = mongoose.model('Inventories', InventoriesSchema);
-const TestDrive = mongoose.model('TestDrive', TestDriveSchema);
-const Notification = mongoose.model('Notification', NotificationSchema);
-
-// Test Drive Vehicle Schema
-const TestDriveVehicleSchema = new mongoose.Schema({
-  brand: { type: String, required: true, default: 'Isuzu' },
-  model: { type: String, required: true },
-  year: { type: String, required: true },
-  plateNumber: { type: String, required: true, unique: true },
-  vin: { type: String },
-  color: { type: String },
-  mileage: { type: String },
-  fuelType: { type: String, enum: ['Diesel', 'Gasoline'], default: 'Diesel' },
-  transmission: { type: String, enum: ['Manual', 'Automatic'], default: 'Manual' },
-  status: { type: String, enum: ['Available', 'In Use', 'Maintenance'], default: 'Available' },
-  location: { type: String, default: 'Isuzu Pasig' },
-  notes: { type: String },
-  addedBy: { type: String, required: true },
-  dateAdded: { type: Date, default: Date.now },
-  lastMaintenanceDate: { type: Date },
-  nextMaintenanceDate: { type: Date }
-}, { timestamps: true });
-
-const TestDriveVehicle = mongoose.model('TestDriveVehicle', TestDriveVehicleSchema);
 
 // ================== ROUTES ==================
 
@@ -465,114 +321,6 @@ app.post('/login', async (req, res) => {
   } catch (err) {
     console.error('❌ Login error:', err);
     res.status(500).json({ success: false, message: 'Server error', error: err.message });
-  }
-});
-
-// ================== MISSING CRITICAL ROUTES ==================
-
-// Get all users
-app.get('/users', async (req, res) => {
-  try {
-    console.log('🔍 Fetching all users...');
-    const users = await User.find({}).select('-password');
-    console.log(`📊 Found ${users.length} users`);
-    res.json(users);
-  } catch (err) {
-    console.error('❌ Error fetching users:', err);
-    res.status(500).json({ success: false, message: 'Error fetching users', error: err.message });
-  }
-});
-
-// Get all users (API version)
-app.get('/api/users', async (req, res) => {
-  try {
-    console.log('🔍 Fetching all users (API)...');
-    const users = await User.find({}).select('-password');
-    console.log(`📊 Found ${users.length} users`);
-    res.json({ success: true, data: users });
-  } catch (err) {
-    console.error('❌ Error fetching users:', err);
-    res.status(500).json({ success: false, message: 'Error fetching users', error: err.message });
-  }
-});
-
-// Get vehicles with enhanced data
-app.get('/api/vehicles', async (req, res) => {
-  try {
-    console.log('🚗 Fetching all vehicles...');
-    const vehicles = await Vehicle.find({});
-    console.log(`📊 Found ${vehicles.length} vehicles`);
-    res.json({ success: true, data: vehicles });
-  } catch (err) {
-    console.error('❌ Error fetching vehicles:', err);
-    res.status(500).json({ success: false, message: 'Error fetching vehicles', error: err.message });
-  }
-});
-
-// Get vehicle stock
-app.get('/api/vehicle-stock', async (req, res) => {
-  try {
-    console.log('📦 Fetching vehicle stock...');
-    const stock = await VehicleStock.find({});
-    console.log(`📊 Found ${stock.length} stock items`);
-    res.json({ success: true, data: stock });
-  } catch (err) {
-    console.error('❌ Error fetching vehicle stock:', err);
-    res.status(500).json({ success: false, message: 'Error fetching vehicle stock', error: err.message });
-  }
-});
-
-// Create allocation
-app.post('/createAllocation', async (req, res) => {
-  try {
-    console.log('📝 Creating allocation:', req.body);
-    const allocation = new DriverAllocation(req.body);
-    await allocation.save();
-    console.log('✅ Allocation created:', allocation._id);
-    res.json({ success: true, data: allocation });
-  } catch (err) {
-    console.error('❌ Error creating allocation:', err);
-    res.status(500).json({ success: false, message: 'Error creating allocation', error: err.message });
-  }
-});
-
-// Create allocation (API version)
-app.post('/api/createAllocation', async (req, res) => {
-  try {
-    console.log('📝 Creating allocation (API):', req.body);
-    const allocation = new DriverAllocation(req.body);
-    await allocation.save();
-    console.log('✅ Allocation created:', allocation._id);
-    res.json({ success: true, data: allocation });
-  } catch (err) {
-    console.error('❌ Error creating allocation:', err);
-    res.status(500).json({ success: false, message: 'Error creating allocation', error: err.message });
-  }
-});
-
-// Update stock
-app.patch('/updateStock/:id', async (req, res) => {
-  try {
-    console.log('📦 Updating stock:', req.params.id, req.body);
-    const stock = await VehicleStock.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    console.log('✅ Stock updated:', stock._id);
-    res.json({ success: true, data: stock });
-  } catch (err) {
-    console.error('❌ Error updating stock:', err);
-    res.status(500).json({ success: false, message: 'Error updating stock', error: err.message });
-  }
-});
-
-// Update stock (API version)  
-app.patch('/api/updateStock/:id', async (req, res) => {
-  try {
-    console.log('📦 Updating stock (API):', req.params.id, req.body);
-    const stock = await VehicleStock.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    console.log('✅ Stock updated:', stock._id);
-    res.json({ success: true, data: stock });
-  } catch (err) {
-    console.error('❌ Error updating stock:', err);
-    res.status(500).json({ success: false, message: 'Error updating stock', error: err.message });
   }
 });
 
@@ -1376,42 +1124,8 @@ app.get('/dashboard/stats', async (req, res) => {
   }
 });
 
-// === MISSING API ENDPOINTS ===
-// Add /api/getUsers endpoint (app calls this)
-app.get('/api/getUsers', async (req, res) => {
-  try {
-    const users = await User.find({});
-    res.json({ success: true, data: users });
-  } catch (err) {
-    console.error('Error fetching users:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Add /admin/users endpoint (some screens call this)
-app.get('/admin/users', async (req, res) => {
-  try {
-    const users = await User.find({});
-    res.json({ success: true, data: users });
-  } catch (err) {
-    console.error('Error fetching admin users:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Add /api/getStock endpoint (app calls this for inventory)
-app.get('/api/getStock', async (req, res) => {
-  try {
-    const vehicles = await VehicleStock.find({});
-    res.json({ success: true, data: vehicles });
-  } catch (err) {
-    console.error('Error fetching vehicle stock:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ================== INVENTORIES ENDPOINTS ==================
-// Get all inventories (this is the correct collection with 18 documents)
+// ================== ESSENTIAL INVENTORY API ENDPOINTS ==================
+// Get all inventories (this is the correct collection with inventory data)
 app.get('/api/inventories', async (req, res) => {
   try {
     const inventories = await Inventories.find({}).sort({ createdAt: -1 });
@@ -1419,6 +1133,30 @@ app.get('/api/inventories', async (req, res) => {
     res.json({ success: true, data: inventories });
   } catch (err) {
     console.error('Error fetching inventories:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get vehicle stock (for compatibility)
+app.get('/api/vehicle-stock', async (req, res) => {
+  try {
+    console.log('📦 Fetching vehicle stock...');
+    const stock = await VehicleStock.find({});
+    console.log(`📊 Found ${stock.length} stock items`);
+    res.json({ success: true, data: stock });
+  } catch (err) {
+    console.error('❌ Error fetching vehicle stock:', err);
+    res.status(500).json({ success: false, message: 'Error fetching vehicle stock', error: err.message });
+  }
+});
+
+// Get stock for compatibility with AgentDashboard
+app.get('/api/getStock', async (req, res) => {
+  try {
+    const inventories = await Inventories.find({});
+    res.json({ success: true, data: inventories });
+  } catch (err) {
+    console.error('Error fetching stock:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -1442,174 +1180,95 @@ app.put('/api/inventories/:id', async (req, res) => {
   }
 });
 
-// ================== TEST DRIVE ENDPOINTS ==================
-// Get all test drives
-app.get('/api/testdrives', async (req, res) => {
+// Enhanced createAllocation endpoint with inventory status update
+app.post('/createAllocation', async (req, res) => {
   try {
-    const testDrives = await TestDrive.find({}).sort({ createdAt: -1 });
-    console.log(`🚗 Found ${testDrives.length} test drive records`);
-    res.json({ success: true, data: testDrives });
+    console.log('📝 Creating allocation with inventory update:', req.body);
+    
+    const allocationData = req.body;
+    
+    // Create the allocation
+    const allocation = new DriverAllocation(allocationData);
+    const savedAllocation = await allocation.save();
+    
+    // If there's a vehicleId/inventoryId, update the inventory status
+    if (allocationData.vehicleId || allocationData.inventoryId) {
+      const inventoryId = allocationData.vehicleId || allocationData.inventoryId;
+      
+      const inventoryUpdate = {
+        status: 'In Use',
+        assignedDriver: allocationData.assignedDriver,
+        assignedAgent: allocationData.assignedAgent,
+        dateAssigned: new Date(),
+        allocationId: savedAllocation._id
+      };
+      
+      const updatedInventory = await Inventories.findByIdAndUpdate(
+        inventoryId, 
+        inventoryUpdate, 
+        { new: true }
+      );
+      
+      if (updatedInventory) {
+        console.log(`✅ Updated inventory ${inventoryId} status to "In Use"`);
+      }
+    }
+    
+    console.log('✅ Allocation created with inventory update:', savedAllocation._id);
+    res.json({ success: true, data: savedAllocation });
   } catch (err) {
-    console.error('Error fetching test drives:', err);
-    res.status(500).json({ success: false, error: err.message });
+    console.error('❌ Error creating allocation:', err);
+    res.status(500).json({ success: false, message: 'Error creating allocation', error: err.message });
   }
 });
 
-// Create new test drive request
-app.post('/api/testdrives', async (req, res) => {
+// API version of createAllocation
+app.post('/api/createAllocation', async (req, res) => {
   try {
-    const testDriveData = req.body;
-    console.log('📝 Creating new test drive request:', testDriveData);
+    console.log('📝 Creating allocation (API) with inventory update:', req.body);
     
-    const newTestDrive = new TestDrive(testDriveData);
-    const savedTestDrive = await newTestDrive.save();
+    const allocationData = req.body;
     
-    // Create notifications for admins and supervisors
-    const adminsAndSupervisors = await User.find({
-      role: { $in: ['Admin', 'Supervisor'] }
-    });
+    // Create the allocation
+    const allocation = new DriverAllocation(allocationData);
+    const savedAllocation = await allocation.save();
     
-    for (const user of adminsAndSupervisors) {
-      const notification = new Notification({
-        userId: user._id,
-        title: 'New Test Drive Request',
-        message: `${testDriveData.requestedBy} has requested a test drive for ${testDriveData.name}`,
-        type: 'test_drive_request',
-        data: {
-          testDriveId: savedTestDrive._id,
-          requestedBy: testDriveData.requestedBy,
-          customerName: testDriveData.name,
-          date: testDriveData.date,
-          time: testDriveData.time
-        },
-        priority: 'medium'
-      });
-      await notification.save();
+    // If there's a vehicleId/inventoryId, update the inventory status
+    if (allocationData.vehicleId || allocationData.inventoryId) {
+      const inventoryId = allocationData.vehicleId || allocationData.inventoryId;
+      
+      const inventoryUpdate = {
+        status: 'In Use',
+        assignedDriver: allocationData.assignedDriver,
+        assignedAgent: allocationData.assignedAgent,
+        dateAssigned: new Date(),
+        allocationId: savedAllocation._id
+      };
+      
+      const updatedInventory = await Inventories.findByIdAndUpdate(
+        inventoryId, 
+        inventoryUpdate, 
+        { new: true }
+      );
+      
+      if (updatedInventory) {
+        console.log(`✅ Updated inventory ${inventoryId} status to "In Use"`);
+      }
     }
     
-    console.log('✅ Test drive request created with notifications:', savedTestDrive._id);
-    res.status(201).json({ 
-      success: true, 
-      data: savedTestDrive,
-      message: 'Test drive request submitted and notifications sent to admins'
-    });
+    console.log('✅ Allocation created with inventory update:', savedAllocation._id);
+    res.json({ success: true, data: savedAllocation });
   } catch (err) {
-    console.error('Error creating test drive request:', err);
-    res.status(500).json({ success: false, error: err.message });
+    console.error('❌ Error creating allocation:', err);
+    res.status(500).json({ success: false, message: 'Error creating allocation', error: err.message });
   }
 });
 
-// Approve or reject test drive request
-app.put('/api/testdrives/:id/approve', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { action, approvedBy, rejectionReason, notes } = req.body; // action: 'approve' or 'reject'
-    
-    console.log(`🔄 ${action === 'approve' ? 'Approving' : 'Rejecting'} test drive ${id} by ${approvedBy}`);
-    
-    const updateData = {
-      status: action === 'approve' ? 'Confirmed' : 'Rejected',
-      approvedBy,
-      lastUpdate: new Date()
-    };
-    
-    if (action === 'reject' && rejectionReason) {
-      updateData.notes = rejectionReason;
-    }
-    if (notes) {
-      updateData.notes = notes;
-    }
-    
-    const updatedTestDrive = await TestDrive.findByIdAndUpdate(id, updateData, { new: true });
-    if (!updatedTestDrive) {
-      return res.status(404).json({ success: false, error: 'Test drive not found' });
-    }
-    
-    // Create notification for the requesting agent
-    const requestingAgent = await User.findOne({ accountName: updatedTestDrive.requestedBy });
-    if (requestingAgent) {
-      const notification = new Notification({
-        userId: requestingAgent._id,
-        title: `Test Drive ${action === 'approve' ? 'Approved' : 'Rejected'}`,
-        message: action === 'approve' 
-          ? `Your test drive request for ${updatedTestDrive.name} has been approved by ${approvedBy}`
-          : `Your test drive request for ${updatedTestDrive.name} has been rejected by ${approvedBy}${rejectionReason ? ': ' + rejectionReason : ''}`,
-        type: action === 'approve' ? 'test_drive_approved' : 'test_drive_rejected',
-        data: {
-          testDriveId: updatedTestDrive._id,
-          customerName: updatedTestDrive.name,
-          date: updatedTestDrive.date,
-          time: updatedTestDrive.time,
-          approvedBy,
-          rejectionReason
-        },
-        priority: 'high'
-      });
-      await notification.save();
-    }
-    
-    res.json({ 
-      success: true, 
-      data: updatedTestDrive,
-      message: `Test drive ${action === 'approve' ? 'approved' : 'rejected'} successfully`
-    });
-  } catch (err) {
-    console.error('Error updating test drive approval:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Get pending test drive requests (for admins/supervisors)
-app.get('/api/testdrives/pending', async (req, res) => {
-  try {
-    const pendingTestDrives = await TestDrive.find({ 
-      status: 'Pending' 
-    }).sort({ createdAt: -1 });
-    console.log(`📋 Found ${pendingTestDrives.length} pending test drive requests`);
-    res.json({ success: true, data: pendingTestDrives });
-  } catch (err) {
-    console.error('Error fetching pending test drives:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Update test drive status
-app.put('/api/testdrives/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = req.body;
-    console.log(`🔄 Updating test drive ${id}:`, updateData);
-    
-    const updatedTestDrive = await TestDrive.findByIdAndUpdate(id, updateData, { new: true });
-    if (!updatedTestDrive) {
-      return res.status(404).json({ success: false, error: 'Test drive not found' });
-    }
-    
-    res.json({ success: true, data: updatedTestDrive });
-  } catch (err) {
-    console.error('Error updating test drive:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ================== ENHANCED DRIVER ALLOCATIONS ENDPOINTS ==================
-// Get all enhanced driver allocations
-app.get('/api/enhanced-driver-allocations', async (req, res) => {
-  try {
-    const allocations = await EnhancedDriverAllocation.find({}).sort({ createdAt: -1 });
-    console.log(`🚛 Found ${allocations.length} enhanced driver allocation records`);
-    res.json({ success: true, data: allocations });
-  } catch (err) {
-    console.error('Error fetching enhanced driver allocations:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Get enhanced driver allocations by driver
-app.get('/api/enhanced-driver-allocations/driver/:driverName', async (req, res) => {
+// Get allocations by driver
+app.get('/api/allocations/driver/:driverName', async (req, res) => {
   try {
     const { driverName } = req.params;
-    const allocations = await EnhancedDriverAllocation.find({ 
+    const allocations = await DriverAllocation.find({ 
       assignedDriver: driverName 
     }).sort({ createdAt: -1 });
     console.log(`🚛 Found ${allocations.length} allocations for driver: ${driverName}`);
@@ -1620,274 +1279,26 @@ app.get('/api/enhanced-driver-allocations/driver/:driverName', async (req, res) 
   }
 });
 
-// Get enhanced driver allocations by agent
-app.get('/api/enhanced-driver-allocations/agent/:agentName', async (req, res) => {
+// Get users endpoints for compatibility
+app.get('/api/getUsers', async (req, res) => {
   try {
-    const { agentName } = req.params;
-    const allocations = await EnhancedDriverAllocation.find({ 
-      assignedAgent: agentName 
-    }).sort({ createdAt: -1 });
-    console.log(`🚛 Found ${allocations.length} allocations for agent: ${agentName}`);
-    res.json({ success: true, data: allocations });
+    const users = await User.find({}).select('-password');
+    res.json({ success: true, data: users });
   } catch (err) {
-    console.error('Error fetching agent allocations:', err);
+    console.error('Error fetching users:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Create new enhanced driver allocation
-app.post('/api/enhanced-driver-allocations', async (req, res) => {
+app.get('/api/users', async (req, res) => {
   try {
-    const allocationData = req.body;
-    console.log('📝 Creating new enhanced driver allocation:', allocationData);
-    
-    const newAllocation = new EnhancedDriverAllocation(allocationData);
-    const savedAllocation = await newAllocation.save();
-    
-    console.log('✅ Enhanced driver allocation created:', savedAllocation._id);
-    res.status(201).json({ success: true, data: savedAllocation });
+    console.log('🔍 Fetching all users (API)...');
+    const users = await User.find({}).select('-password');
+    console.log(`📊 Found ${users.length} users`);
+    res.json({ success: true, data: users });
   } catch (err) {
-    console.error('Error creating enhanced driver allocation:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Update enhanced driver allocation
-app.put('/api/enhanced-driver-allocations/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = { ...req.body, lastUpdate: new Date() };
-    console.log(`🔄 Updating enhanced driver allocation ${id}:`, updateData);
-    
-    const updatedAllocation = await EnhancedDriverAllocation.findByIdAndUpdate(id, updateData, { new: true });
-    if (!updatedAllocation) {
-      return res.status(404).json({ success: false, error: 'Enhanced driver allocation not found' });
-    }
-    
-    res.json({ success: true, data: updatedAllocation });
-  } catch (err) {
-    console.error('Error updating enhanced driver allocation:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Update location for enhanced driver allocation
-app.put('/api/enhanced-driver-allocations/:id/location', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { lat, lng, address, event } = req.body;
-    
-    const updateData = {
-      currentLocation: {
-        lat,
-        lng,
-        timestamp: new Date(),
-        address
-      },
-      lastUpdate: new Date(),
-      $push: {
-        locationHistory: {
-          lat,
-          lng,
-          timestamp: new Date(),
-          address,
-          event: event || 'update'
-        }
-      }
-    };
-    
-    const updatedAllocation = await EnhancedDriverAllocation.findByIdAndUpdate(id, updateData, { new: true });
-    if (!updatedAllocation) {
-      return res.status(404).json({ success: false, error: 'Enhanced driver allocation not found' });
-    }
-    
-    console.log(`📍 Location updated for allocation ${id}: ${address || `${lat}, ${lng}`}`);
-    res.json({ success: true, data: updatedAllocation });
-  } catch (err) {
-    console.error('Error updating location:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ================== TEST DRIVE VEHICLE ENDPOINTS ==================
-// Get all test drive vehicles
-app.get('/api/test-drive-vehicles', async (req, res) => {
-  try {
-    console.log('📋 Fetching test drive vehicles');
-    const vehicles = await TestDriveVehicle.find().sort({ dateAdded: -1 });
-    
-    res.json({ 
-      success: true, 
-      data: vehicles,
-      count: vehicles.length 
-    });
-  } catch (err) {
-    console.error('Error fetching test drive vehicles:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Add new test drive vehicle
-app.post('/api/test-drive-vehicles', async (req, res) => {
-  try {
-    console.log('🚗 Adding new test drive vehicle:', req.body);
-    
-    const newVehicle = new TestDriveVehicle(req.body);
-    const savedVehicle = await newVehicle.save();
-    
-    console.log('✅ Test drive vehicle added successfully:', savedVehicle._id);
-    res.json({ 
-      success: true, 
-      message: 'Test drive vehicle added successfully',
-      data: savedVehicle 
-    });
-  } catch (err) {
-    console.error('Error adding test drive vehicle:', err);
-    if (err.code === 11000) {
-      res.status(400).json({ 
-        success: false, 
-        error: 'Plate number already exists' 
-      });
-    } else {
-      res.status(500).json({ success: false, error: err.message });
-    }
-  }
-});
-
-// Update test drive vehicle status
-app.put('/api/test-drive-vehicles/:id/status', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-    
-    console.log(`🔄 Updating test drive vehicle ${id} status to: ${status}`);
-    
-    const updatedVehicle = await TestDriveVehicle.findByIdAndUpdate(
-      id, 
-      { status, lastMaintenanceDate: status === 'Maintenance' ? new Date() : undefined },
-      { new: true }
-    );
-    
-    if (!updatedVehicle) {
-      return res.status(404).json({ success: false, error: 'Vehicle not found' });
-    }
-    
-    res.json({ 
-      success: true, 
-      message: `Vehicle status updated to ${status}`,
-      data: updatedVehicle 
-    });
-  } catch (err) {
-    console.error('Error updating vehicle status:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Delete test drive vehicle
-app.delete('/api/test-drive-vehicles/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    console.log(`🗑️ Deleting test drive vehicle: ${id}`);
-    
-    const deletedVehicle = await TestDriveVehicle.findByIdAndDelete(id);
-    
-    if (!deletedVehicle) {
-      return res.status(404).json({ success: false, error: 'Vehicle not found' });
-    }
-    
-    res.json({ 
-      success: true, 
-      message: 'Test drive vehicle removed successfully' 
-    });
-  } catch (err) {
-    console.error('Error deleting test drive vehicle:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Get available test drive vehicles for agents
-app.get('/api/test-drive-vehicles/available', async (req, res) => {
-  try {
-    console.log('🚙 Fetching available test drive vehicles');
-    const availableVehicles = await TestDriveVehicle.find({ 
-      status: 'Available' 
-    }).sort({ model: 1 });
-    
-    res.json({ 
-      success: true, 
-      data: availableVehicles,
-      count: availableVehicles.length 
-    });
-  } catch (err) {
-    console.error('Error fetching available test drive vehicles:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// ================== NOTIFICATIONS ENDPOINTS ==================
-// Get notifications for a user
-app.get('/api/notifications/:userId', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const { limit = 50, unreadOnly = false } = req.query;
-    
-    const filter = { 
-      userId: userId,
-      isDeleted: false
-    };
-    
-    if (unreadOnly === 'true') {
-      filter.isRead = false;
-    }
-    
-    const notifications = await Notification.find(filter)
-      .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
-      .populate('userId', 'username accountName role');
-      
-    console.log(`🔔 Found ${notifications.length} notifications for user ${userId}`);
-    res.json({ success: true, data: notifications });
-  } catch (err) {
-    console.error('Error fetching notifications:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Mark notification as read
-app.put('/api/notifications/:id/read', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updatedNotification = await Notification.findByIdAndUpdate(
-      id, 
-      { isRead: true, readAt: new Date() }, 
-      { new: true }
-    );
-    
-    if (!updatedNotification) {
-      return res.status(404).json({ success: false, error: 'Notification not found' });
-    }
-    
-    res.json({ success: true, data: updatedNotification });
-  } catch (err) {
-    console.error('Error marking notification as read:', err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Get unread notification count
-app.get('/api/notifications/:userId/unread-count', async (req, res) => {
-  try {
-    const { userId } = req.params;
-    const count = await Notification.countDocuments({
-      userId: userId,
-      isRead: false,
-      isDeleted: false
-    });
-    
-    res.json({ success: true, count });
-  } catch (err) {
-    console.error('Error getting unread notification count:', err);
-    res.status(500).json({ success: false, error: err.message });
+    console.error('❌ Error fetching users:', err);
+    res.status(500).json({ success: false, message: 'Error fetching users', error: err.message });
   }
 });
 
@@ -1909,24 +1320,15 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('  - POST /login');
   console.log('  - POST /admin/create-user');
   console.log('  - GET  /admin/users');
+  console.log('  - GET  /api/users');
   console.log('  - GET  /api/getUsers');
-  console.log('  - GET  /api/getStock');
   console.log('  - GET  /api/inventories');
   console.log('  - PUT  /api/inventories/:id');
-  console.log('  - GET  /api/testdrives');
-  console.log('  - POST /api/testdrives');
-  console.log('  - PUT  /api/testdrives/:id');
-  console.log('  - PUT  /api/testdrives/:id/approve');
-  console.log('  - GET  /api/testdrives/pending');
-  console.log('  - GET  /api/notifications/:userId');
-  console.log('  - PUT  /api/notifications/:id/read');
-  console.log('  - GET  /api/notifications/:userId/unread-count');
-  console.log('  - GET  /api/enhanced-driver-allocations');
-  console.log('  - GET  /api/enhanced-driver-allocations/driver/:driverName');
-  console.log('  - GET  /api/enhanced-driver-allocations/agent/:agentName');
-  console.log('  - POST /api/enhanced-driver-allocations');
-  console.log('  - PUT  /api/enhanced-driver-allocations/:id');
-  console.log('  - PUT  /api/enhanced-driver-allocations/:id/location');
+  console.log('  - GET  /api/vehicle-stock');
+  console.log('  - GET  /api/getStock');
+  console.log('  - POST /createAllocation');
+  console.log('  - POST /api/createAllocation');
+  console.log('  - GET  /api/allocations/driver/:driverName');
   console.log('  - GET  /vehicles');
   console.log('  - GET  /driver-allocations');
   console.log('  - GET  /getAllocation');
