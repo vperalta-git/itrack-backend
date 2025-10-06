@@ -327,26 +327,63 @@ app.post('/login', async (req, res) => {
 // === USER MANAGEMENT ===
 app.post('/admin/create-user', async (req, res) => {
   try {
+    console.log('👤 Creating new user:', req.body);
     const { username, password, role, assignedTo, accountName } = req.body;
+    
+    // Validate required fields
     if (!username || !password || !role || !accountName) {
-      return res.status(400).json({ success: false, message: 'Missing required fields' });
+      console.log('❌ Missing required fields:', { username: !!username, password: !!password, role: !!role, accountName: !!accountName });
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Missing required fields', 
+        required: ['username', 'password', 'role', 'accountName']
+      });
+    }
+
+    // Check if username already exists
+    const existingUser = await User.findOne({ username: username.toLowerCase().trim() });
+    if (existingUser) {
+      console.log('❌ Username already exists:', username);
+      return res.status(400).json({ success: false, message: 'Username already exists' });
     }
 
     const newUser = new User({
       username: username.toLowerCase().trim(),
       password,
       role,
-      assignedTo,
+      assignedTo: assignedTo || null,
       accountName,
     });
 
-    await newUser.save();
-    res.json({ success: true, message: 'User created successfully', user: newUser });
+    const savedUser = await newUser.save();
+    console.log('✅ User created successfully:', savedUser._id);
+    
+    // Return user without password
+    const userResponse = {
+      _id: savedUser._id,
+      username: savedUser.username,
+      role: savedUser.role,
+      accountName: savedUser.accountName,
+      assignedTo: savedUser.assignedTo,
+      createdAt: savedUser.createdAt,
+      updatedAt: savedUser.updatedAt
+    };
+    
+    res.status(201).json({ 
+      success: true, 
+      message: 'User created successfully', 
+      user: userResponse 
+    });
   } catch (err) {
+    console.error('❌ Error creating user:', err);
     if (err.code === 11000) {
       return res.status(400).json({ success: false, message: 'Username already exists' });
     }
-    res.status(500).json({ success: false, message: 'Error creating user', error: err.message });
+    res.status(500).json({ 
+      success: false, 
+      message: 'Error creating user', 
+      error: err.message 
+    });
   }
 });
 
@@ -1137,6 +1174,27 @@ app.get('/api/inventories', async (req, res) => {
   }
 });
 
+// Create new inventory item
+app.post('/api/inventories', async (req, res) => {
+  try {
+    console.log('📝 Creating new inventory item:', req.body);
+    const inventoryData = req.body;
+    
+    const newInventory = new Inventories(inventoryData);
+    const savedInventory = await newInventory.save();
+    
+    console.log('✅ Inventory item created:', savedInventory._id);
+    res.status(201).json({ success: true, data: savedInventory, message: 'Inventory item created successfully' });
+  } catch (err) {
+    console.error('❌ Error creating inventory:', err);
+    if (err.code === 11000) {
+      res.status(400).json({ success: false, error: 'Duplicate inventory item' });
+    } else {
+      res.status(500).json({ success: false, error: err.message });
+    }
+  }
+});
+
 // Get vehicle stock (for compatibility)
 app.get('/api/vehicle-stock', async (req, res) => {
   try {
@@ -1173,9 +1231,29 @@ app.put('/api/inventories/:id', async (req, res) => {
       return res.status(404).json({ success: false, error: 'Inventory item not found' });
     }
     
-    res.json({ success: true, data: updatedItem });
+    console.log('✅ Inventory updated successfully');
+    res.json({ success: true, data: updatedItem, message: 'Inventory updated successfully' });
   } catch (err) {
     console.error('Error updating inventory:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Delete inventory item
+app.delete('/api/inventories/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`🗑️ Deleting inventory item: ${id}`);
+    
+    const deletedItem = await Inventories.findByIdAndDelete(id);
+    if (!deletedItem) {
+      return res.status(404).json({ success: false, error: 'Inventory item not found' });
+    }
+    
+    console.log('✅ Inventory item deleted successfully');
+    res.json({ success: true, message: 'Inventory item deleted successfully' });
+  } catch (err) {
+    console.error('❌ Error deleting inventory:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -1264,6 +1342,68 @@ app.post('/api/createAllocation', async (req, res) => {
   }
 });
 
+// ================== DISPATCH MANAGEMENT ENDPOINTS ==================
+// Get all dispatch assignments
+app.get('/api/dispatch-assignments', async (req, res) => {
+  try {
+    const assignments = await DispatchAssignment.find({}).sort({ createdAt: -1 });
+    console.log(`📋 Found ${assignments.length} dispatch assignments`);
+    res.json({ success: true, data: assignments });
+  } catch (err) {
+    console.error('Error fetching dispatch assignments:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Create new dispatch assignment
+app.post('/api/dispatch-assignments', async (req, res) => {
+  try {
+    console.log('📝 Creating dispatch assignment:', req.body);
+    const assignmentData = req.body;
+    
+    const newAssignment = new DispatchAssignment(assignmentData);
+    const savedAssignment = await newAssignment.save();
+    
+    console.log('✅ Dispatch assignment created:', savedAssignment._id);
+    res.status(201).json({ success: true, data: savedAssignment });
+  } catch (err) {
+    console.error('❌ Error creating dispatch assignment:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Update dispatch assignment status
+app.put('/api/dispatch-assignments/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = { ...req.body, updatedAt: new Date() };
+    console.log(`🔄 Updating dispatch assignment ${id}:`, updateData);
+    
+    const updatedAssignment = await DispatchAssignment.findByIdAndUpdate(id, updateData, { new: true });
+    if (!updatedAssignment) {
+      return res.status(404).json({ success: false, error: 'Dispatch assignment not found' });
+    }
+    
+    res.json({ success: true, data: updatedAssignment });
+  } catch (err) {
+    console.error('Error updating dispatch assignment:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get dispatch assignments by status
+app.get('/api/dispatch-assignments/status/:status', async (req, res) => {
+  try {
+    const { status } = req.params;
+    const assignments = await DispatchAssignment.find({ status }).sort({ createdAt: -1 });
+    console.log(`📋 Found ${assignments.length} dispatch assignments with status: ${status}`);
+    res.json({ success: true, data: assignments });
+  } catch (err) {
+    console.error('Error fetching dispatch assignments by status:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Get allocations by driver
 app.get('/api/allocations/driver/:driverName', async (req, res) => {
   try {
@@ -1275,6 +1415,60 @@ app.get('/api/allocations/driver/:driverName', async (req, res) => {
     res.json({ success: true, data: allocations });
   } catch (err) {
     console.error('Error fetching driver allocations:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Admin assign vehicle to driver
+app.post('/admin/assign-vehicle', async (req, res) => {
+  try {
+    console.log('🔧 Admin assigning vehicle:', req.body);
+    const { vehicleId, driverId, driverName, assignedBy, notes } = req.body;
+    
+    if (!vehicleId || !driverName) {
+      return res.status(400).json({ success: false, error: 'Vehicle ID and driver name are required' });
+    }
+    
+    // Update inventory status
+    const updatedInventory = await Inventories.findByIdAndUpdate(
+      vehicleId,
+      {
+        status: 'Assigned to Dispatch',
+        assignedDriver: driverName,
+        assignedAgent: assignedBy,
+        dateAssigned: new Date()
+      },
+      { new: true }
+    );
+    
+    if (!updatedInventory) {
+      return res.status(404).json({ success: false, error: 'Vehicle not found' });
+    }
+    
+    // Create allocation record
+    const allocationData = {
+      unitName: updatedInventory.unitName,
+      unitId: updatedInventory.unitId,
+      bodyColor: updatedInventory.bodyColor,
+      variation: updatedInventory.variation,
+      assignedDriver: driverName,
+      status: 'Assigned',
+      date: new Date(),
+      assignedBy: assignedBy,
+      notes: notes
+    };
+    
+    const allocation = new DriverAllocation(allocationData);
+    const savedAllocation = await allocation.save();
+    
+    console.log('✅ Vehicle assigned successfully:', savedAllocation._id);
+    res.json({ 
+      success: true, 
+      data: { inventory: updatedInventory, allocation: savedAllocation },
+      message: 'Vehicle assigned to driver successfully'
+    });
+  } catch (err) {
+    console.error('❌ Error assigning vehicle:', err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -1323,12 +1517,19 @@ const server = app.listen(PORT, '0.0.0.0', () => {
   console.log('  - GET  /api/users');
   console.log('  - GET  /api/getUsers');
   console.log('  - GET  /api/inventories');
+  console.log('  - POST /api/inventories');
   console.log('  - PUT  /api/inventories/:id');
+  console.log('  - DELETE /api/inventories/:id');
   console.log('  - GET  /api/vehicle-stock');
   console.log('  - GET  /api/getStock');
   console.log('  - POST /createAllocation');
   console.log('  - POST /api/createAllocation');
   console.log('  - GET  /api/allocations/driver/:driverName');
+  console.log('  - POST /admin/assign-vehicle');
+  console.log('  - GET  /api/dispatch-assignments');
+  console.log('  - POST /api/dispatch-assignments');
+  console.log('  - PUT  /api/dispatch-assignments/:id');
+  console.log('  - GET  /api/dispatch-assignments/status/:status');
   console.log('  - GET  /vehicles');
   console.log('  - GET  /driver-allocations');
   console.log('  - GET  /getAllocation');
