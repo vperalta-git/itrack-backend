@@ -7,7 +7,10 @@ const UserSchema = new mongoose.Schema({
   password: String,
   role: String,
   resetPasswordToken: String,
-  resetPasswordExpires: Date
+  resetPasswordExpires: Date,
+  profilePicture: String, // URL or base64 string for profile picture
+  profilePictureUrl: String, // Alternative URL field
+  lastActive: Date
 });
 
 const UserModel = mongoose.model("users", UserSchema);
