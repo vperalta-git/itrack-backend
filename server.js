@@ -627,7 +627,7 @@ app.delete('/deleteUser/:id', async (req, res) => {
 
 // ========== INVENTORY/STOCK MANAGEMENT ENDPOINTS ==========
 
-// Inventory Schema
+// Inventory Schema - Updated to handle driver assignments
 const InventorySchema = new mongoose.Schema({
   unitName: String,
   unitId: String,
@@ -635,7 +635,16 @@ const InventorySchema = new mongoose.Schema({
   variation: String,
   conductionNumber: String,
   quantity: { type: Number, default: 1 },
-  status: { type: String, default: 'Available' }
+  status: { 
+    type: String, 
+    enum: ['Available', 'Reserved', 'Sold', 'Assigned to Dispatch', 'In Process', 'In Dispatch', 'Allocated', 'Assigned to Driver', 'In Use'], 
+    default: 'Available' 
+  },
+  // Driver assignment fields
+  assignedDriver: String,
+  assignedDriverId: String,
+  assignedAgent: String,
+  assignedAt: Date
 }, { timestamps: true });
 const Inventory = mongoose.model('Inventory', InventorySchema);
 
@@ -727,19 +736,291 @@ app.get('/getAllocation', async (req, res) => {
   }
 });
 
-// Create new allocation
+// Create new allocation - FIXED to properly assign vehicles from inventories
 app.post('/createAllocation', async (req, res) => {
   try {
-    const allocationData = req.body;
-    console.log('📋 Creating allocation:', allocationData);
+    const { unitName, unitId, bodyColor, variation, assignedDriver, assignedAgent, driverId } = req.body;
+    console.log('📋 Creating allocation:', req.body);
+    
+    // Check if vehicle exists in inventories and is available
+    const inventoryItem = await Inventory.findOne({ unitId });
+    if (!inventoryItem) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vehicle not found in inventories collection' 
+      });
+    }
+    
+    if (inventoryItem.status === 'Assigned to Driver') {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Vehicle ${unitId} is already assigned to driver: ${inventoryItem.assignedDriver}` 
+      });
+    }
+    
+    // Create the allocation
+    const allocationData = {
+      unitName,
+      unitId,
+      bodyColor,
+      variation,
+      assignedDriver,
+      assignedAgent,
+      status: 'Assigned to Driver',
+      allocatedBy: req.body.allocatedBy || 'System'
+    };
     
     const newAllocation = new DriverAllocation(allocationData);
     await newAllocation.save();
     
-    console.log('✅ Created allocation:', newAllocation.unitName);
-    res.json({ success: true, message: 'Allocation created successfully', data: newAllocation });
+    // Update inventory status to reflect assignment
+    await Inventory.findOneAndUpdate(
+      { unitId },
+      { 
+        status: 'Assigned to Driver',
+        assignedDriver: assignedDriver,
+        assignedDriverId: driverId || assignedDriver,
+        assignedAgent: assignedAgent,
+        assignedAt: new Date()
+      }
+    );
+    
+    console.log(`✅ Created allocation: ${unitName} → ${assignedDriver} and updated inventory status`);
+    res.json({ 
+      success: true, 
+      message: 'Allocation created successfully and inventory updated', 
+      data: newAllocation 
+    });
   } catch (error) {
     console.error('❌ Create allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get allocations for a specific driver - NEW ENDPOINT
+app.get('/getAllocation/:driverId', async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    const allocations = await DriverAllocation.find({ 
+      $or: [
+        { assignedDriver: driverId },
+        { assignedDriver: { $regex: driverId, $options: 'i' } }
+      ],
+      status: { $in: ['Assigned to Driver', 'In Transit', 'Active'] }
+    }).sort({ createdAt: -1 });
+    
+    console.log(`📊 Found ${allocations.length} allocations for driver: ${driverId}`);
+    res.json({ success: true, data: allocations });
+  } catch (error) {
+    console.error('❌ Get driver allocations error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get available vehicles for assignment - NEW ENDPOINT
+app.get('/inventories/available', async (req, res) => {
+  try {
+    const availableVehicles = await Inventory.find({ 
+      status: { $in: ['Available', 'Reserved'] }
+    }).sort({ createdAt: -1 });
+    
+    console.log(`📦 Found ${availableVehicles.length} available vehicles in inventories`);
+    res.json({ success: true, data: availableVehicles });
+  } catch (error) {
+    console.error('❌ Get available vehicles error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Remove/Unassign allocation - NEW ENDPOINT
+app.post('/removeAllocation', async (req, res) => {
+  try {
+    const { allocationId, unitId, reason } = req.body;
+    console.log(`🔄 Removing allocation: ${allocationId} for vehicle: ${unitId}`);
+    
+    // Update allocation status
+    const allocation = await DriverAllocation.findByIdAndUpdate(
+      allocationId,
+      { 
+        status: 'Unassigned',
+        unassignedAt: new Date(),
+        unassignedReason: reason || 'Manual removal'
+      },
+      { new: true }
+    );
+    
+    if (!allocation) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Allocation not found' 
+      });
+    }
+    
+    // Update inventory status back to available
+    await Inventory.findOneAndUpdate(
+      { unitId },
+      { 
+        status: 'Available',
+        assignedDriver: null,
+        assignedDriverId: null,
+        assignedAgent: null,
+        assignedAt: null
+      }
+    );
+    
+    console.log(`✅ Removed allocation and freed vehicle: ${unitId}`);
+    res.json({ 
+      success: true, 
+      message: 'Allocation removed successfully and vehicle freed', 
+      data: allocation 
+    });
+  } catch (error) {
+    console.error('❌ Remove allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get vehicle assignment status - NEW ENDPOINT
+app.get('/inventories/:unitId/status', async (req, res) => {
+  try {
+    const { unitId } = req.params;
+    const vehicle = await Inventory.findOne({ unitId });
+    
+    if (!vehicle) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Vehicle not found in inventories' 
+      });
+    }
+    
+    // Also get allocation details if assigned
+    let allocation = null;
+    if (vehicle.status === 'Assigned to Driver') {
+      allocation = await DriverAllocation.findOne({ 
+        unitId,
+        status: { $in: ['Assigned to Driver', 'In Transit', 'Active'] }
+      });
+    }
+    
+    res.json({ 
+      success: true, 
+      data: {
+        vehicle,
+        allocation,
+        isAssigned: vehicle.status === 'Assigned to Driver'
+      }
+    });
+  } catch (error) {
+    console.error('❌ Get vehicle status error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ========== ADMIN VEHICLE ASSIGNMENT ENDPOINTS ==========
+
+// Admin assign vehicle to driver - NEW ENDPOINT for admin dashboard
+app.post('/admin/assign-vehicle', async (req, res) => {
+  try {
+    const { 
+      unitName, 
+      unitId, 
+      driverUsername, 
+      agentUsername, 
+      bodyColor, 
+      variation, 
+      processes 
+    } = req.body;
+    
+    console.log('🔧 Admin assigning vehicle:', {
+      vehicle: `${unitName} (${unitId})`,
+      driver: driverUsername,
+      agent: agentUsername,
+      processes: processes?.length || 0
+    });
+    
+    // Check if vehicle exists in inventories and is available
+    const inventoryItem = await Inventory.findOne({ unitId });
+    if (!inventoryItem) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vehicle not found in inventories collection' 
+      });
+    }
+    
+    if (inventoryItem.status === 'Assigned to Driver') {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Vehicle ${unitId} is already assigned to driver: ${inventoryItem.assignedDriver}` 
+      });
+    }
+    
+    // Find the driver user
+    const driver = await User.findOne({ username: driverUsername });
+    if (!driver) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Driver not found' 
+      });
+    }
+    
+    // Create the allocation with enhanced data
+    const allocationData = {
+      unitName,
+      unitId,
+      bodyColor: bodyColor || 'Not Specified',
+      variation: variation || 'Standard',
+      assignedDriver: driver.accountName || driverUsername,
+      assignedAgent: agentUsername || 'System',
+      status: 'Assigned to Driver',
+      allocatedBy: 'Admin Dashboard',
+      requestedProcesses: processes || ['delivery_to_isuzu_pasig'],
+      processStatus: {},
+      processCompletedBy: {},
+      processCompletedAt: {}
+    };
+    
+    // Initialize process status
+    const processesToBeDone = processes || ['delivery_to_isuzu_pasig'];
+    processesToBeDone.forEach(process => {
+      allocationData.processStatus[process] = false;
+    });
+    
+    allocationData.overallProgress = {
+      completed: 0,
+      total: processesToBeDone.length,
+      isComplete: false
+    };
+    
+    const newAllocation = new DriverAllocation(allocationData);
+    await newAllocation.save();
+    
+    // Update inventory status
+    await Inventory.findOneAndUpdate(
+      { unitId },
+      { 
+        status: 'Assigned to Driver',
+        assignedDriver: driver.accountName || driverUsername,
+        assignedDriverId: driver._id.toString(),
+        assignedAgent: agentUsername,
+        assignedAt: new Date()
+      }
+    );
+    
+    console.log(`✅ Admin assigned: ${unitName} → ${driver.accountName || driverUsername}`);
+    
+    res.json({ 
+      success: true, 
+      message: 'Vehicle assigned successfully by admin', 
+      data: {
+        allocation: {
+          ...newAllocation.toObject(),
+          processesToBeDone: processesToBeDone
+        },
+        inventory: inventoryItem
+      }
+    });
+  } catch (error) {
+    console.error('❌ Admin assign vehicle error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -1274,29 +1555,46 @@ app.post('/api/releases', async (req, res) => {
     const releaseData = req.body;
     console.log('📋 Confirming vehicle release:', releaseData);
     
+    // First try to find the allocation
+    const allocation = await DriverAllocation.findById(releaseData.vehicleId);
+    console.log('🔍 Found allocation:', allocation ? 'Yes' : 'No');
+    
+    if (!allocation) {
+      console.log('❌ Vehicle allocation not found with ID:', releaseData.vehicleId);
+      return res.status(404).json({
+        success: false,
+        error: `Vehicle allocation not found with ID: ${releaseData.vehicleId}`
+      });
+    }
+    
     // Update the allocation to released status
     const updatedAllocation = await DriverAllocation.findByIdAndUpdate(
       releaseData.vehicleId,
       {
         status: 'Released',
         releasedAt: releaseData.releasedAt,
-        releasedBy: releaseData.releasedBy
+        releasedBy: releaseData.releasedBy,
+        // Store release metadata
+        releaseMetadata: {
+          completedProcesses: releaseData.completedProcesses,
+          releaseDate: releaseData.releasedAt,
+          releasedBy: releaseData.releasedBy
+        }
       },
       { new: true }
     );
     
-    if (!updatedAllocation) {
-      return res.status(404).json({
-        success: false,
-        error: 'Vehicle allocation not found'
-      });
-    }
+    console.log('✅ Vehicle released successfully:', {
+      id: updatedAllocation._id,
+      unitName: updatedAllocation.unitName,
+      status: updatedAllocation.status,
+      releasedAt: updatedAllocation.releasedAt
+    });
     
-    console.log('✅ Vehicle released successfully:', updatedAllocation);
     res.json({ 
       success: true, 
       data: updatedAllocation,
-      message: 'Vehicle released successfully' 
+      message: `Vehicle ${updatedAllocation.unitName} released successfully` 
     });
   } catch (error) {
     console.error('❌ Release confirmation error:', error);
