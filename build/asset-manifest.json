@@ -1,0 +1,27 @@
+{
+  "files": {
+    "main.css": "/static/css/main.bf427872.css",
+    "main.js": "/static/js/main.342bb40e.js",
+    "static/js/239.307b2835.chunk.js": "/static/js/239.307b2835.chunk.js",
+    "static/js/977.56815bda.chunk.js": "/static/js/977.56815bda.chunk.js",
+    "static/js/455.152cf1ed.chunk.js": "/static/js/455.152cf1ed.chunk.js",
+    "static/js/453.d2799ebf.chunk.js": "/static/js/453.d2799ebf.chunk.js",
+    "static/media/I-track logo.png": "/static/media/I-track logo.4470381f9df8fd18d78a.png",
+    "static/media/itrackwhite.png": "/static/media/itrackwhite.4eb3f5e2724d3200f5bf.png",
+    "static/media/users.png": "/static/media/users.36b50b41871992a43d45.png",
+    "static/media/request.png": "/static/media/request.ec9026aa6941cb4e454b.png",
+    "static/media/hide.png": "/static/media/hide.54b3107d160578572bcc.png",
+    "static/media/show.png": "/static/media/show.180932f866861728bd41.png",
+    "index.html": "/index.html",
+    "main.bf427872.css.map": "/static/css/main.bf427872.css.map",
+    "main.342bb40e.js.map": "/static/js/main.342bb40e.js.map",
+    "239.307b2835.chunk.js.map": "/static/js/239.307b2835.chunk.js.map",
+    "977.56815bda.chunk.js.map": "/static/js/977.56815bda.chunk.js.map",
+    "455.152cf1ed.chunk.js.map": "/static/js/455.152cf1ed.chunk.js.map",
+    "453.d2799ebf.chunk.js.map": "/static/js/453.d2799ebf.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.bf427872.css",
+    "static/js/main.342bb40e.js"
+  ]
+}
