@@ -34,10 +34,8 @@ app.use(express.json());
 const API_CONFIG = {
   // Development Mobile Backend (current)
   MOBILE_BACKEND: {
-    config: {
-      BASE_URL: 'http://192.168.254.161:5000',
-      NAME: 'Mobile Development Backend'
-    }
+    BASE_URL: 'http://localhost:5000',
+    NAME: 'Mobile Development Backend'
   },
   
   // Production Render Backend
@@ -288,16 +286,38 @@ const DriverAllocationSchema = new mongoose.Schema({
 }, { timestamps: true });
 const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema);
 
+// ======================== ROUTES =========================
+
+// Root endpoint - Health check
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'I-Track Backend Server is running',
+    version: '1.0.0',
+    timestamp: new Date().toISOString(),
+    endpoints: {
+      auth: ['/api/login', '/api/logout', '/api/checkAuth', '/api/forgot-password', '/api/reset-password'],
+      users: ['/api/getUsers', '/api/createUser', '/api/updateUser/:id', '/api/deleteUser/:id'],
+      inventory: ['/getStock', '/createStock', '/api/inventory/:id'],
+      allocations: ['/getAllocation', '/createAllocation'],
+      vehicles: ['/vehicles', '/vehicles/:unitId'],
+      dispatch: ['/api/dispatch/assignments'],
+      test: ['/test']
+    }
+  });
+});
+
 // ======================== AUTH =========================
 
 // Enhanced Login with Temporary Password Support
-app.post('/login', async (req, res) => {
+app.post('/api/login', async (req, res) => {
   try {
-    const { username, password } = req.body;
-    console.log('📥 Login attempt:', username);
+    const { email, username, password } = req.body;
+    const loginIdentifier = email || username; // Support both email and username
+    console.log('📥 Login attempt:', loginIdentifier);
 
     // Check admin credentials first
-    if (username === 'isuzupasigadmin' && password === 'Isuzu_Pasig1') {
+    if (loginIdentifier === 'isuzupasigadmin' && password === 'Isuzu_Pasig1') {
       req.session.user = {
         username: 'isuzupasigadmin',
         role: 'admin',
@@ -306,10 +326,15 @@ app.post('/login', async (req, res) => {
       return res.json({ success: true, role: 'admin', accountName: 'Isuzu Pasig Admin' });
     }
 
-    // Find user in database
-    const user = await User.findOne({ username: username.toLowerCase() });
+    // Find user in database by email or username
+    const user = await User.findOne({
+      $or: [
+        { email: loginIdentifier.toLowerCase() },
+        { username: loginIdentifier.toLowerCase() }
+      ]
+    });
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid username' });
+      return res.status(401).json({ success: false, message: 'Invalid username or email' });
     }
 
     let isValidLogin = false;
@@ -324,7 +349,7 @@ app.post('/login', async (req, res) => {
         isValidLogin = true;
         isTemporaryPassword = true;
         
-        console.log('🔑 User logged in with temporary password:', username);
+        console.log('🔑 User logged in with temporary password:', loginIdentifier);
         
         // Clear temporary password after successful use
         user.temporaryPassword = undefined;
@@ -338,7 +363,7 @@ app.post('/login', async (req, res) => {
       const isMatch = await bcrypt.compare(password, user.password);
       if (isMatch) {
         isValidLogin = true;
-        console.log('🔑 User logged in with regular password:', username);
+        console.log('🔑 User logged in with regular password:', loginIdentifier);
       }
     }
 
@@ -372,7 +397,7 @@ app.post('/login', async (req, res) => {
     if (isTemporaryPassword) {
       response.requirePasswordChange = true;
       response.message = 'Login successful with temporary password. Please change your password immediately.';
-      console.log('⚠️  User should change password immediately:', username);
+      console.log('⚠️  User should change password immediately:', loginIdentifier);
     }
 
     res.json(response);
@@ -385,7 +410,7 @@ app.post('/login', async (req, res) => {
 // ==================== PASSWORD MANAGEMENT ROUTES ====================
 
 // Forgot Password - Send temporary password via email
-app.post('/forgot-password', async (req, res) => {
+app.post('/api/forgot-password', async (req, res) => {
   try {
     const { username } = req.body;
     console.log('🔑 Forgot password request for:', username);
@@ -444,7 +469,7 @@ app.post('/forgot-password', async (req, res) => {
 });
 
 // Change Password - For logged-in users
-app.post('/change-password', async (req, res) => {
+app.post('/api/change-password', async (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body;
     console.log('🔐 Change password request for user:', req.session?.user?.username);
@@ -493,7 +518,7 @@ app.post('/change-password', async (req, res) => {
 });
 
 // Get current user info (for profile)
-app.get('/profile', (req, res) => {
+app.get('/api/profile', (req, res) => {
   try {
     if (!req.session?.user) {
       return res.status(401).json({ success: false, message: 'Not authenticated' });
@@ -510,7 +535,7 @@ app.get('/profile', (req, res) => {
 });
 
 // Logout
-app.post('/logout', (req, res) => {
+app.post('/api/logout', (req, res) => {
   try {
     console.log('👋 Logout request from:', req.session?.user?.username);
     
@@ -533,7 +558,7 @@ app.post('/logout', (req, res) => {
 // ========== USER MANAGEMENT ENDPOINTS ==========
 
 // Get all users
-app.get('/getUsers', async (req, res) => {
+app.get('/api/getUsers', async (req, res) => {
   try {
     const users = await User.find({}).select('-password -temporaryPassword');
     console.log(`📊 Found ${users.length} users`);
@@ -545,7 +570,7 @@ app.get('/getUsers', async (req, res) => {
 });
 
 // Create new user
-app.post('/createUser', async (req, res) => {
+app.post('/api/createUser', async (req, res) => {
   try {
     const { username, password, role, accountName, email } = req.body;
     
@@ -649,7 +674,7 @@ const InventorySchema = new mongoose.Schema({
 const Inventory = mongoose.model('Inventory', InventorySchema);
 
 // Get all stock/inventory
-app.get('/getStock', async (req, res) => {
+app.get('/api/getStock', async (req, res) => {
   try {
     const inventory = await Inventory.find({}).sort({ createdAt: -1 });
     console.log(`📊 Found ${inventory.length} inventory items`);
@@ -725,7 +750,7 @@ app.delete('/deleteStock/:id', async (req, res) => {
 // ========== DRIVER ALLOCATION ENDPOINTS ==========
 
 // Get all allocations
-app.get('/getAllocation', async (req, res) => {
+app.get('/api/getAllocation', async (req, res) => {
   try {
     const allocations = await DriverAllocation.find({}).sort({ createdAt: -1 });
     console.log(`📊 Found ${allocations.length} allocations`);
@@ -737,7 +762,7 @@ app.get('/getAllocation', async (req, res) => {
 });
 
 // Create new allocation - FIXED to properly assign vehicles from inventories
-app.post('/createAllocation', async (req, res) => {
+app.post('/api/createAllocation', async (req, res) => {
   try {
     const { unitName, unitId, bodyColor, variation, assignedDriver, assignedAgent, driverId } = req.body;
     console.log('📋 Creating allocation:', req.body);
@@ -1439,7 +1464,7 @@ const ServiceRequestSchema = new mongoose.Schema({
 const Servicerequest = mongoose.model('Servicerequest', ServiceRequestSchema);
 
 // Get service requests
-app.get('/getRequest', async (req, res) => {
+app.get('/api/getRequest', async (req, res) => {
   try {
     const requests = await Servicerequest.find({}).sort({ createdAt: -1 });
     console.log(`📊 Found ${requests.length} service requests`);
@@ -1662,14 +1687,14 @@ app.get('/api/config', (req, res) => {
       name: 'I-Track Mobile Backend',
       endpoints: {
         // Authentication
-        login: '/login',
-        forgotPassword: '/forgot-password',
-        changePassword: '/change-password',
-        logout: '/logout',
-        profile: '/profile',
+        login: '/api/login',
+        forgotPassword: '/api/forgot-password',
+        changePassword: '/api/change-password',
+        logout: '/api/logout',
+        profile: '/api/profile',
         
         // User Management
-        getUsers: '/getUsers',
+        getUsers: '/api/getUsers',
         createUser: '/createUser',
         updateUser: '/updateUser/:id',
         deleteUser: '/deleteUser/:id',
@@ -1731,6 +1756,17 @@ app.get('/api/config', (req, res) => {
   });
 });
 
+// Root endpoint
+app.get('/', (req, res) => {
+  res.json({
+    success: true,
+    message: 'I-Track Backend API Server',
+    version: '2.0.0',
+    status: 'Running',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Test endpoint
 app.get('/test', (req, res) => {
   res.json({
@@ -1768,14 +1804,14 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log('');
   console.log('📋 Available endpoints:');
   console.log('  🔐 AUTHENTICATION:');
-  console.log('    - POST /login');
-  console.log('    - POST /forgot-password');
-  console.log('    - POST /change-password');
-  console.log('    - POST /logout');
-  console.log('    - GET  /profile');
+  console.log('    - POST /api/login');
+  console.log('    - POST /api/forgot-password');
+  console.log('    - POST /api/change-password');
+  console.log('    - POST /api/logout');
+  console.log('    - GET  /api/profile');
   console.log('');
   console.log('  👥 USER MANAGEMENT:');
-  console.log('    - GET    /getUsers');
+  console.log('    - GET    /api/getUsers');
   console.log('    - POST   /createUser');
   console.log('    - PUT    /updateUser/:id');
   console.log('    - DELETE /deleteUser/:id');
