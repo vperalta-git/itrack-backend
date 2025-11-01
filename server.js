@@ -318,12 +318,9 @@ app.post('/login', async (req, res) => {
       });
     }
 
-    // Find user in database by email or username
+    // Find user in database by email only
     const user = await User.findOne({
-      $or: [
-        { email: username.toLowerCase().trim() },
-        { username: username.toLowerCase().trim() }
-      ]
+      email: username.toLowerCase().trim()
     });
     
     if (!user) {
@@ -411,27 +408,20 @@ app.post('/login', async (req, res) => {
 // Forgot Password - Send temporary password via email
 app.post('/forgot-password', async (req, res) => {
   try {
-    const { username } = req.body;
-    console.log('🔑 Forgot password request for:', username);
+    const { username } = req.body; // This will actually be an email now
+    console.log('🔑 Forgot password request for email:', username);
 
     if (!username) {
-      return res.status(400).json({ success: false, message: 'Username is required' });
+      return res.status(400).json({ success: false, message: 'Email is required' });
     }
 
-    // Find user by username
-    const user = await User.findOne({ username: username.toLowerCase() });
+    // Find user by email only
+    const user = await User.findOne({ email: username.toLowerCase().trim() });
     if (!user) {
       // Don't reveal if user exists or not for security
       return res.json({ 
         success: true, 
-        message: 'If the username exists and has an email, a temporary password has been sent.' 
-      });
-    }
-
-    if (!user.email) {
-      return res.json({ 
-        success: true, 
-        message: 'If the username exists and has an email, a temporary password has been sent.' 
+        message: 'If the email exists, a temporary password has been sent.' 
       });
     }
 
