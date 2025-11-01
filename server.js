@@ -305,16 +305,29 @@ app.post('/login', async (req, res) => {
     if (username === 'isuzupasigadmin' && password === 'Isuzu_Pasig1') {
       req.session.user = {
         username: 'isuzupasigadmin',
-        role: 'admin',
+        role: 'Admin',
         accountName: 'Isuzu Pasig Admin'
       };
-      return res.json({ success: true, role: 'admin', accountName: 'Isuzu Pasig Admin' });
+      return res.json({ 
+        success: true, 
+        user: {
+          role: 'Admin', 
+          accountName: 'Isuzu Pasig Admin',
+          email: 'admin@isuzupasig.com'
+        }
+      });
     }
 
-    // Find user in database
-    const user = await User.findOne({ username: username.toLowerCase() });
+    // Find user in database by email or username
+    const user = await User.findOne({
+      $or: [
+        { email: username.toLowerCase().trim() },
+        { username: username.toLowerCase().trim() }
+      ]
+    });
+    
     if (!user) {
-      return res.status(401).json({ success: false, message: 'Invalid username' });
+      return res.status(401).json({ success: false, message: 'Invalid email or username' });
     }
 
     let isValidLogin = false;
@@ -361,6 +374,8 @@ app.post('/login', async (req, res) => {
       username: user.username,
       role: user.role,
       accountName: user.accountName,
+      name: user.name || user.accountName,
+      email: user.email,
       assignedTo: user.assignedTo
     };
 
@@ -368,9 +383,13 @@ app.post('/login', async (req, res) => {
 
     const response = {
       success: true,
-      role: user.role,
-      accountName: user.accountName,
-      user: sessionUser
+      user: {
+        role: user.role,
+        accountName: user.accountName,
+        name: user.name || user.accountName,
+        email: user.email,
+        username: user.username
+      }
     };
 
     // If temporary password was used, notify frontend to prompt password change
