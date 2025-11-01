@@ -198,9 +198,16 @@ mongoose.connect(mongoURI)
 const UserSchema = new mongoose.Schema({
   username: { type: String, required: true },
   password: { type: String, required: true },
-  role: { type: String, enum: ['admin', 'supervisor', 'manager', 'salesAgent'], default: 'salesAgent' },
+  role: { type: String, enum: ['Admin', 'Dispatch', 'Driver', 'Supervisor', 'Manager', 'SalesAgent'], default: 'SalesAgent' },
   accountName: { type: String, required: true },
   email: { type: String, required: false }, // For password reset functionality
+  name: { type: String, required: false }, // Additional name field
+  isActive: { type: Boolean, default: true },
+  profilePicture: { type: String, default: null },
+  phoneNumber: { type: String, required: false },
+  phoneno: { type: String, required: false }, // Alternative phone field for compatibility
+  createdBy: { type: String, default: 'System' },
+  updatedBy: { type: String, default: 'System' },
   assignedTo: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
   
   // Enhanced password management fields
