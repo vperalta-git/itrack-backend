@@ -214,6 +214,17 @@ const UserSchema = new mongoose.Schema({
   temporaryPassword: { type: String },
   temporaryPasswordExpires: { type: Date },
   lastLogin: { type: Date, default: Date.now },
+  
+  // GPS tracking fields for drivers
+  currentLocation: {
+    latitude: { type: Number },
+    longitude: { type: Number },
+    timestamp: { type: Number },
+    speed: { type: Number, default: 0 },
+    heading: { type: Number, default: 0 },
+    lastUpdate: { type: Date }
+  },
+  
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
 });
@@ -1180,6 +1191,171 @@ app.delete('/api/dispatch/assignments/:id', async (req, res) => {
       details: error.message
     });
   }
+});
+
+// ========== DRIVER LOCATION TRACKING ENDPOINTS ==========
+
+// Update driver location (real-time GPS tracking)
+app.post('/updateDriverLocation', async (req, res) => {
+  try {
+    const { driverId, driverEmail, driverName, location } = req.body;
+    console.log('📍 Updating driver location:', { driverName, location });
+
+    if (!location || !location.latitude || !location.longitude) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Location coordinates are required' 
+      });
+    }
+
+    // Find the driver by ID or email
+    let driver = null;
+    if (driverId) {
+      driver = await User.findById(driverId);
+    } else if (driverEmail) {
+      driver = await User.findOne({ email: driverEmail });
+    }
+
+    if (!driver) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Driver not found' 
+      });
+    }
+
+    // Update driver's current location
+    await User.updateOne(
+      { _id: driver._id },
+      { 
+        $set: { 
+          currentLocation: {
+            latitude: location.latitude,
+            longitude: location.longitude,
+            timestamp: location.timestamp || Date.now(),
+            speed: location.speed || 0,
+            heading: location.heading || 0,
+            lastUpdate: new Date()
+          }
+        }
+      }
+    );
+
+    // Update any active allocations for this driver
+    await DriverAllocation.updateMany(
+      { 
+        $or: [
+          { assignedDriverName: driver.name },
+          { assignedDriverName: driver.username },
+          { assignedDriverName: driverName }
+        ]
+      },
+      { 
+        $set: { 
+          'location.latitude': location.latitude,
+          'location.longitude': location.longitude,
+          'location.lastUpdate': new Date(),
+          'location.speed': location.speed || 0,
+          'location.heading': location.heading || 0
+        }
+      }
+    );
+
+    console.log('✅ Driver location updated successfully');
+    res.json({ 
+      success: true, 
+      message: 'Location updated successfully',
+      location: location 
+    });
+
+  } catch (error) {
+    console.error('❌ Update driver location error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to update location',
+      error: error.message 
+    });
+  }
+});
+
+// Get driver's current location
+app.get('/getDriverLocation/:driverId', async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    console.log('📍 Getting location for driver:', driverId);
+
+    const driver = await User.findById(driverId).select('currentLocation name email');
+    
+    if (!driver) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Driver not found' 
+      });
+    }
+
+    res.json({ 
+      success: true, 
+      data: {
+        driverName: driver.name,
+        driverEmail: driver.email,
+        location: driver.currentLocation || null
+      }
+    });
+
+  } catch (error) {
+    console.error('❌ Get driver location error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to get location',
+      error: error.message 
+    });
+  }
+});
+
+// Get all active drivers with their locations
+app.get('/getAllDriverLocations', async (req, res) => {
+  try {
+    console.log('📍 Getting all driver locations...');
+
+    const drivers = await User.find({ 
+      role: 'Driver',
+      isActive: true,
+      currentLocation: { $exists: true }
+    }).select('name email currentLocation');
+
+    const driverLocations = drivers.map(driver => ({
+      id: driver._id,
+      name: driver.name,
+      email: driver.email,
+      location: driver.currentLocation
+    }));
+
+    console.log(`✅ Found ${driverLocations.length} drivers with location data`);
+    res.json({ 
+      success: true, 
+      data: driverLocations
+    });
+
+  } catch (error) {
+    console.error('❌ Get all driver locations error:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: 'Failed to get driver locations',
+      error: error.message 
+    });
+  }
+});
+
+// API versions for web compatibility
+app.post('/api/updateDriverLocation', async (req, res) => {
+  // Redirect to main endpoint
+  req.url = '/updateDriverLocation';
+  return app._router.handle(req, res);
+});
+
+app.get('/api/getAllDriverLocations', async (req, res) => {
+  // Redirect to main endpoint  
+  req.url = '/getAllDriverLocations';
+  return app._router.handle(req, res);
 });
 
 // ========== VEHICLE ROUTES FOR DRIVER DASHBOARD ==========
