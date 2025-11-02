@@ -403,6 +403,106 @@ app.post('/login', async (req, res) => {
   }
 });
 
+// API Login route (for web compatibility)
+app.post('/api/login', async (req, res) => {
+  try {
+    const { email, password } = req.body; // Web version sends 'email' field
+    console.log('📥 API Login attempt:', email);
+
+    // Check admin credentials first
+    if (email === 'isuzupasigadmin' && password === 'Isuzu_Pasig1') {
+      req.session.user = {
+        username: 'isuzupasigadmin',
+        role: 'Admin',
+        accountName: 'Isuzu Pasig Admin'
+      };
+      return res.json({ 
+        success: true, 
+        user: {
+          id: 'admin',
+          role: 'Admin', 
+          name: 'Isuzu Pasig Admin',
+          email: 'admin@isuzupasig.com'
+        }
+      });
+    }
+
+    // Find user in database by email only
+    const user = await User.findOne({
+      email: email.toLowerCase().trim()
+    });
+    
+    if (!user) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+
+    let isValidLogin = false;
+    let isTemporaryPassword = false;
+
+    // Check if using temporary password
+    if (user.temporaryPassword && 
+        user.temporaryPasswordExpires && 
+        user.temporaryPasswordExpires > Date.now()) {
+      
+      if (password === user.temporaryPassword) {
+        isValidLogin = true;
+        isTemporaryPassword = true;
+        
+        console.log('🔑 User logged in with temporary password:', email);
+        
+        // Clear temporary password after successful use
+        user.temporaryPassword = undefined;
+        user.temporaryPasswordExpires = undefined;
+        await user.save();
+      }
+    }
+
+    // Check regular password if temp password didn't work
+    if (!isValidLogin && user.password) {
+      const isMatch = await bcrypt.compare(password, user.password);
+      if (isMatch) {
+        isValidLogin = true;
+        console.log('✅ User logged in with regular password:', email);
+      }
+    }
+
+    if (!isValidLogin) {
+      return res.status(401).json({ success: false, message: 'Invalid email or password' });
+    }
+
+    // Set session
+    req.session.user = {
+      id: user._id,
+      username: user.username || user.email,
+      email: user.email,
+      role: user.role || 'User',
+      accountName: user.name || user.accountName
+    };
+
+    const response = {
+      success: true,
+      user: {
+        id: user._id,
+        name: user.name || user.accountName,
+        email: user.email,
+        role: user.role || 'User'
+      }
+    };
+
+    // If temporary password was used, notify frontend to prompt password change
+    if (isTemporaryPassword) {
+      response.requirePasswordChange = true;
+      response.message = 'Login successful with temporary password. Please change your password immediately.';
+      console.log('⚠️  User should change password immediately:', email);
+    }
+
+    res.json(response);
+  } catch (err) {
+    console.error('❌ API Login error:', err);
+    res.status(500).json({ success: false, message: 'Server error', error: err.message });
+  }
+});
+
 // ==================== PASSWORD MANAGEMENT ROUTES ====================
 
 // Forgot Password - Send temporary password via email
@@ -454,6 +554,58 @@ app.post('/forgot-password', async (req, res) => {
   } catch (error) {
     console.error('❌ Forgot password error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
+  }
+});
+
+// API Forgot Password route (for web compatibility)
+app.post('/api/forgot-password', async (req, res) => {
+  try {
+    const { email } = req.body; // Web version sends 'email' field
+    console.log('🔑 API Forgot password request for email:', email);
+
+    if (!email) {
+      return res.status(400).json({ success: false, message: 'Email is required' });
+    }
+
+    // Find user by email only
+    const user = await User.findOne({ email: email.toLowerCase().trim() });
+    if (!user) {
+      // Don't reveal if user exists or not for security
+      return res.json({ 
+        success: true, 
+        message: 'If this email is registered, a reset link has been sent.' 
+      });
+    }
+
+    // Generate temporary password (8 characters, alphanumeric)
+    const temporaryPassword = Math.random().toString(36).slice(-8).toUpperCase();
+    const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour from now
+
+    // Save temporary password to user
+    user.temporaryPassword = temporaryPassword;
+    user.temporaryPasswordExpires = expiresAt;
+    await user.save();
+
+    // Send email with temporary password
+    const emailResult = await sendPasswordResetEmail(user.email, user.username, temporaryPassword);
+    
+    if (emailResult.success) {
+      console.log('✅ Temporary password sent to:', user.email);
+      res.json({ 
+        success: true, 
+        message: 'If this email is registered, a reset link has been sent.' 
+      });
+    } else {
+      console.error('❌ Failed to send email:', emailResult.message);
+      res.status(500).json({ 
+        success: false, 
+        message: 'Failed to process request. Please try again.' 
+      });
+    }
+
+  } catch (error) {
+    console.error('❌ API Forgot password error:', error);
+    res.status(500).json({ success: false, message: 'Failed to process request. Please try again.' });
   }
 });
 
@@ -555,6 +707,18 @@ app.get('/getUsers', async (req, res) => {
   } catch (error) {
     console.error('❌ Get users error:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API Get Users route (for web compatibility)
+app.get('/api/getUsers', async (req, res) => {
+  try {
+    const users = await User.find({}).select('-password -temporaryPassword');
+    console.log(`📊 API Found ${users.length} users`);
+    res.json(users); // Web version expects direct array, not wrapped in success object
+  } catch (error) {
+    console.error('❌ API Get users error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
