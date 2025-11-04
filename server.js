@@ -484,6 +484,7 @@ app.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
     console.log('📥 Login attempt:', username);
+    console.log('🔍 Looking for user with email or username:', username.toLowerCase().trim());
 
     // Check admin credentials first
     if (username === 'isuzupasigadmin' && password === 'Isuzu_Pasig1') {
@@ -502,14 +503,20 @@ app.post('/login', async (req, res) => {
       });
     }
 
-    // Find user in database by email only
+    // Find user in database by email OR username
     const user = await User.findOne({
-      email: username.toLowerCase().trim()
+      $or: [
+        { email: username.toLowerCase().trim() },
+        { username: username.toLowerCase().trim() }
+      ]
     });
     
     if (!user) {
+      console.log('❌ User not found for:', username.toLowerCase().trim());
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
+
+    console.log('✅ User found:', user.username, 'Email:', user.email);
 
     let isValidLogin = false;
     let isTemporaryPassword = false;
@@ -534,14 +541,18 @@ app.post('/login', async (req, res) => {
 
     // If not using temporary password, check regular password
     if (!isValidLogin) {
+      console.log('🔍 Comparing password for user:', user.username);
       const isMatch = await bcrypt.compare(password, user.password);
       if (isMatch) {
         isValidLogin = true;
         console.log('🔑 User logged in with regular password:', username);
+      } else {
+        console.log('❌ Password mismatch for user:', user.username);
       }
     }
 
     if (!isValidLogin) {
+      console.log('❌ Login failed for user:', user.username);
       return res.status(401).json({ success: false, message: 'Invalid password' });
     }
 
