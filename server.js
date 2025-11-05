@@ -258,7 +258,7 @@ const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSche
 app.post('/login', async (req, res) => {
   try {
     const { username, password } = req.body;
-    console.log('📥 Login attempt:', username);
+    console.log('📥 Login attempt for:', username);
 
     // Check admin credentials first
     if (username === 'isuzupasigadmin' && password === 'Isuzu_Pasig1') {
@@ -280,7 +280,7 @@ app.post('/login', async (req, res) => {
     
     if (!user) {
       console.log('❌ User not found with identifier:', username);
-      return res.status(401).json({ success: false, message: 'Invalid email or username' });
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
     
     console.log('✅ User found:', user.email || user.username, 'Role:', user.role);
@@ -317,21 +317,19 @@ app.post('/login', async (req, res) => {
         }
       } catch (bcryptError) {
         console.log('🔍 bcrypt failed, trying plain text comparison');
-      }
-      
-      // If bcrypt fails, try plain text comparison (for legacy passwords)
-      if (!isValidLogin && password === user.password) {
-        isValidLogin = true;
-        console.log('🔑 User logged in with plain text password:', user.email || user.username);
-        console.log('⚠️  Consider hashing this password for security');
+        
+        // If bcrypt fails, try plain text comparison (for legacy passwords)
+        if (password === user.password) {
+          isValidLogin = true;
+          console.log('🔑 User logged in with plain text password:', user.email || user.username);
+          console.log('⚠️  Consider hashing this password for security');
+        }
       }
     }
 
     if (!isValidLogin) {
       console.log('❌ Login failed - Invalid password for:', user.email || user.username);
-      console.log('🔍 Attempted password:', password);
-      console.log('🔍 Stored password:', user.password);
-      return res.status(401).json({ success: false, message: 'Invalid password' });
+      return res.status(401).json({ success: false, message: 'Invalid credentials' });
     }
 
     // Update last login
@@ -363,6 +361,7 @@ app.post('/login', async (req, res) => {
       console.log('⚠️  User should change password immediately:', username);
     }
 
+    console.log('✅ Login successful for:', user.email || user.username);
     res.json(response);
   } catch (err) {
     console.error('❌ Login error:', err);
