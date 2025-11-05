@@ -697,6 +697,103 @@ app.post('/test/create-sample-data', async (req, res) => {
   }
 });
 
+// ========== USER MANAGEMENT ENDPOINTS ==========
+
+// Get all users (mobile app endpoint)
+app.get('/getUsers', async (req, res) => {
+  try {
+    const users = await User.find({}).select('-password -temporaryPassword');
+    console.log(`📊 Found ${users.length} users`);
+    res.json({ success: true, data: users });
+  } catch (error) {
+    console.error('❌ Get users error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// API Get Users route (for web compatibility)
+app.get('/api/getUsers', async (req, res) => {
+  try {
+    const users = await User.find({}).select('-password -temporaryPassword');
+    console.log(`📊 API Found ${users.length} users`);
+    res.json(users); // Web version expects direct array, not wrapped in success object
+  } catch (error) {
+    console.error('❌ API Get users error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ========== INVENTORY MANAGEMENT ENDPOINTS ==========
+
+// Inventory Schema
+const InventorySchema = new mongoose.Schema({
+  unitName: String,
+  unitId: String,
+  bodyColor: String,
+  variation: String,
+  engineNumber: String,
+  chassisNumber: String,
+  location: {
+    latitude: Number,
+    longitude: Number,
+    address: String,
+    lastUpdated: Date
+  }
+}, { timestamps: true });
+const Inventory = mongoose.model('Inventory', InventorySchema);
+
+// Get all inventory/stock
+app.get('/getStock', async (req, res) => {
+  try {
+    const inventory = await Inventory.find({});
+    console.log(`📦 Found ${inventory.length} inventory items`);
+    res.json({ success: true, data: inventory });
+  } catch (error) {
+    console.error('❌ Get inventory error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create inventory item
+app.post('/createStock', async (req, res) => {
+  try {
+    const newItem = new Inventory(req.body);
+    await newItem.save();
+    console.log('📦 Created new inventory item:', newItem.unitId);
+    res.json({ success: true, data: newItem });
+  } catch (error) {
+    console.error('❌ Create inventory error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ========== ALLOCATION MANAGEMENT ENDPOINTS ==========
+
+// Get all allocations
+app.get('/getAllocation', async (req, res) => {
+  try {
+    const allocations = await DriverAllocation.find({});
+    console.log(`🚛 Found ${allocations.length} allocations`);
+    res.json({ success: true, data: allocations });
+  } catch (error) {
+    console.error('❌ Get allocations error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Create allocation
+app.post('/createAllocation', async (req, res) => {
+  try {
+    const newAllocation = new DriverAllocation(req.body);
+    await newAllocation.save();
+    console.log('🚛 Created new allocation:', newAllocation.unitId);
+    res.json({ success: true, data: newAllocation });
+  } catch (error) {
+    console.error('❌ Create allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // Test endpoint
 app.get('/test', (req, res) => {
   res.send('Server test successful!');
