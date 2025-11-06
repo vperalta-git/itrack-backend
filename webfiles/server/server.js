@@ -44,6 +44,7 @@ const driverallocationRoutes = require('./routes/driverallocationRoutes');
 // const testdriveRoutes = require('./routes/testdriveRoutes');
 const durationRoutes = require('./routes/durationRoutes');
 const auditTrailRoutes = require('./routes/auditTrailRoutes');
+const vehicleModelRoutes = require('./routes/vehicleModelRoutes');
 
 const app = express();
 
@@ -86,6 +87,7 @@ app.use('/api', inventoryRoutes);
 app.use('/api', driverallocationRoutes);
 app.use('/api', durationRoutes);
 app.use('/api/audit-trail', auditTrailRoutes);
+app.use('/api', vehicleModelRoutes);
 
 // Import models for location management endpoints
 const InventoryModel = require('./models/Inventory');
