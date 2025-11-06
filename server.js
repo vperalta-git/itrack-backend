@@ -556,14 +556,18 @@ app.post('/login', async (req, res) => {
       return res.status(401).json({ success: false, message: 'Invalid password' });
     }
 
-    // Update last login
+    // Update last login - ensure username is set if missing
+    if (!user.username && user.email) {
+      user.username = user.email.split('@')[0]; // Use email prefix as username
+    }
+    
     user.lastLogin = new Date();
     await user.save();
 
     // Create session
     const sessionUser = {
       id: user._id,
-      username: user.username,
+      username: user.username || user.email,
       role: user.role,
       accountName: user.accountName,
       name: user.name || user.accountName,
@@ -580,7 +584,7 @@ app.post('/login', async (req, res) => {
         accountName: user.accountName,
         name: user.name || user.accountName,
         email: user.email,
-        username: user.username
+        username: user.username || user.email
       }
     };
 
@@ -644,6 +648,11 @@ app.post('/api/login', async (req, res) => {
         isTemporaryPassword = true;
         
         console.log('🔑 User logged in with temporary password:', email);
+        
+        // Ensure username is set if missing
+        if (!user.username && user.email) {
+          user.username = user.email.split('@')[0];
+        }
         
         // Clear temporary password after successful use
         user.temporaryPassword = undefined;
