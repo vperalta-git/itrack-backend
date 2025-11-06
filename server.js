@@ -1103,13 +1103,23 @@ app.post('/change-password', async (req, res) => {
 
 // Inventory Schema
 const InventorySchema = new mongoose.Schema({
-  unitName: String,
+  unitName: { type: String, required: true },
   unitId: String,
   bodyColor: String,
-  variation: String,
-  conductionNumber: String,
+  variation: { type: String, required: true },
+  conductionNumber: { type: String, required: true },
+  vin: { type: String, required: true, unique: true },
+  engineNumber: String,
+  keyNumber: String,
+  plateNumber: String,
+  chassisNumber: String,
+  notes: String,
   quantity: { type: Number, default: 1 },
-  status: { type: String, default: 'Available' }
+  status: { type: String, default: 'Available' },
+  addedBy: String,
+  lastUpdatedBy: String,
+  addedDate: Date,
+  dateUpdated: Date
 }, { timestamps: true });
 const Inventory = mongoose.model('Inventory', InventorySchema, 'inventories');
 
@@ -2785,37 +2795,7 @@ app.listen(PORT, HOST, () => {
 // =================== ADDITIONAL API ENDPOINTS FOR UNIFIED MOBILE APP ===================
 
 // Inventory Management Endpoints
-app.get('/getInventory', async (req, res) => {
-  try {
-    const inventory = await Vehicle.find({}).sort({ createdAt: -1 });
-    res.json({ success: true, data: inventory });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 
-app.post('/addToInventory', async (req, res) => {
-  try {
-    const newVehicle = new Vehicle({
-      ...req.body,
-      status: req.body.status || 'In Stock',
-      addedDate: new Date()
-    });
-    await newVehicle.save();
-    res.json({ success: true, data: newVehicle });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
-
-app.put('/updateInventoryItem/:id', async (req, res) => {
-  try {
-    const updated = await Vehicle.findByIdAndUpdate(req.params.id, req.body, { new: true });
-    res.json({ success: true, data: updated });
-  } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
-  }
-});
 
 // Service Request Endpoints
 app.get('/getServiceRequests', async (req, res) => {
