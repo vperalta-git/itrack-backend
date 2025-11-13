@@ -963,15 +963,29 @@ app.get('/api/getUsers', async (req, res) => {
   }
 });
 
-// Create new user
+// Create new user (Mobile endpoint)
 app.post('/createUser', async (req, res) => {
   try {
-    const { username, password, role, accountName, email } = req.body;
+    const { username, password, role, accountName, email, name, phoneno, assignedTo } = req.body;
     
-    // Check if user already exists
-    const existingUser = await User.findOne({ username: username.toLowerCase() });
+    // Support both web and mobile formats
+    const finalName = name || accountName;
+    const finalEmail = email;
+    const finalPhone = phoneno;
+    
+    // Check if user already exists (check both email and username)
+    const existingUser = await User.findOne({
+      $or: [
+        { email: finalEmail },
+        { username: username ? username.toLowerCase() : undefined }
+      ]
+    });
+    
     if (existingUser) {
-      return res.status(400).json({ success: false, message: 'Username already exists' });
+      return res.status(400).json({ 
+        success: false, 
+        message: existingUser.email === finalEmail ? 'Email already exists' : 'Username already exists' 
+      });
     }
     
     // Hash password
@@ -979,15 +993,24 @@ app.post('/createUser', async (req, res) => {
     const hashedPassword = await bcrypt.hash(password, saltRounds);
     
     const newUser = new User({
-      username: username.toLowerCase(),
+      // Web schema fields (primary)
+      name: finalName,
+      email: finalEmail,
+      phoneno: finalPhone,
       password: hashedPassword,
-      role: role || 'salesAgent',
-      accountName,
-      email
+      role: role || 'Sales Agent',
+      
+      // Mobile-specific fields (synced via pre-save hook)
+      username: username ? username.toLowerCase() : (finalEmail ? finalEmail.split('@')[0] : undefined),
+      accountName: finalName,
+      phoneNumber: finalPhone,
+      
+      // Sales Agent specific field (mobile only)
+      assignedTo: assignedTo || undefined
     });
     
     await newUser.save();
-    console.log('✅ Created user:', newUser.username);
+    console.log('✅ Created user:', newUser.email || newUser.username);
     
     // Remove password from response
     const userResponse = newUser.toObject();
@@ -1001,14 +1024,78 @@ app.post('/createUser', async (req, res) => {
   }
 });
 
-// Update user
+// Create new user (Web compatibility endpoint)
+app.post('/api/createUser', async (req, res) => {
+  try {
+    const { name, phoneno, email, password, role, assignedTo } = req.body;
+    
+    console.log('📝 Web creating user:', { name, email, role });
+    
+    // Check if user already exists
+    const existingEmail = await User.findOne({ email: email });
+    if (existingEmail) {
+      return res.status(400).json({ error: 'Email already exists' });
+    }
+    
+    const existingPhone = await User.findOne({ phoneno: phoneno });
+    if (existingPhone) {
+      return res.status(400).json({ error: 'Phone number already exists' });
+    }
+    
+    // Create new user (password is stored as plain text per web backend standard)
+    const newUser = new User({
+      name,
+      phoneno,
+      email,
+      password, // Plain text as per web version
+      role,
+      assignedTo: assignedTo || undefined,
+      // Mobile fields will be synced via pre-save hook
+      username: email.split('@')[0],
+      accountName: name,
+      phoneNumber: phoneno
+    });
+    
+    await newUser.save();
+    console.log('✅ Web created user:', newUser.email);
+    
+    // Return format matching web backend (no password in response)
+    const userResponse = newUser.toObject();
+    delete userResponse.password;
+    delete userResponse.temporaryPassword;
+    
+    res.json(userResponse);
+  } catch (error) {
+    console.error('❌ Web create user error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update user (Mobile endpoint)
 app.put('/updateUser/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
     
-    // Remove sensitive fields from update
-    delete updateData.password;
+    // Handle password updates if provided (keep as plain text for web compatibility)
+    // If web sends password, it's plain text; if mobile sends it, it might be hashed
+    // For safety, accept as-is since web version uses plain text
+    
+    // Sync web/mobile field names if provided
+    if (updateData.name && !updateData.accountName) {
+      updateData.accountName = updateData.name;
+    }
+    if (updateData.phoneno && !updateData.phoneNumber) {
+      updateData.phoneNumber = updateData.phoneno;
+    }
+    if (updateData.accountName && !updateData.name) {
+      updateData.name = updateData.accountName;
+    }
+    if (updateData.phoneNumber && !updateData.phoneno) {
+      updateData.phoneno = updateData.phoneNumber;
+    }
+    
+    // Remove sensitive temporary password field
     delete updateData.temporaryPassword;
     
     const updatedUser = await User.findByIdAndUpdate(id, updateData, { new: true }).select('-password -temporaryPassword');
@@ -1017,7 +1104,7 @@ app.put('/updateUser/:id', async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
     
-    console.log('✅ Updated user:', updatedUser.username);
+    console.log('✅ Updated user:', updatedUser.email || updatedUser.username);
     res.json({ success: true, message: 'User updated successfully', data: updatedUser });
   } catch (error) {
     console.error('❌ Update user error:', error);
@@ -1025,7 +1112,42 @@ app.put('/updateUser/:id', async (req, res) => {
   }
 });
 
-// Delete user
+// Update user (Web compatibility endpoint)
+app.put('/api/updateUser/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = { ...req.body };
+    
+    console.log('📝 Web updating user:', id, 'with data:', Object.keys(updateData));
+    
+    // Sync web/mobile field names
+    if (updateData.name) {
+      updateData.accountName = updateData.name;
+    }
+    if (updateData.phoneno) {
+      updateData.phoneNumber = updateData.phoneno;
+    }
+    
+    const updatedUser = await User.findByIdAndUpdate(id, updateData, { new: true }).select('-temporaryPassword');
+    
+    if (!updatedUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log('✅ Web updated user:', updatedUser.email);
+    
+    // Return format matching web backend (password included as per web version)
+    const userResponse = updatedUser.toObject();
+    delete userResponse.temporaryPassword;
+    
+    res.json(userResponse);
+  } catch (error) {
+    console.error('❌ Web update user error:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete user (Mobile endpoint)
 app.delete('/deleteUser/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -1036,11 +1158,32 @@ app.delete('/deleteUser/:id', async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
     
-    console.log('✅ Deleted user:', deletedUser.username);
+    console.log('✅ Deleted user:', deletedUser.email || deletedUser.username);
     res.json({ success: true, message: 'User deleted successfully' });
   } catch (error) {
     console.error('❌ Delete user error:', error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete user (Web compatibility endpoint)
+app.delete('/api/deleteUser/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log('🗑️ Web deleting user:', id);
+    
+    const deletedUser = await User.findByIdAndDelete(id);
+    
+    if (!deletedUser) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    
+    console.log('✅ Web deleted user:', deletedUser.email);
+    res.json({ message: 'User deleted successfully' });
+  } catch (error) {
+    console.error('❌ Web delete user error:', error);
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -3002,9 +3145,13 @@ app.listen(PORT, HOST, () => {
   console.log('');
   console.log('  👥 USER MANAGEMENT:');
   console.log('    - GET    /getUsers');
-  console.log('    - POST   /createUser');
-  console.log('    - PUT    /updateUser/:id');
-  console.log('    - DELETE /deleteUser/:id');
+  console.log('    - GET    /api/getUsers (web)');
+  console.log('    - POST   /createUser (mobile)');
+  console.log('    - POST   /api/createUser (web)');
+  console.log('    - PUT    /updateUser/:id (mobile)');
+  console.log('    - PUT    /api/updateUser/:id (web)');
+  console.log('    - DELETE /deleteUser/:id (mobile)');
+  console.log('    - DELETE /api/deleteUser/:id (web)');
   console.log('');
   console.log('  👤 PROFILE MANAGEMENT:');
   console.log('    - GET    /api/getUser/:id');
