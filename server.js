@@ -515,7 +515,37 @@ const DriverAllocationSchema = new mongoose.Schema({
 
   readyForRelease: { type: Boolean, default: false },
   releasedAt: Date,
-  releasedBy: String
+  releasedBy: String,
+
+  // NEW: Driver Live Location Tracking
+  driverLocation: {
+    latitude: Number,
+    longitude: Number,
+    timestamp: Date
+  },
+
+  // NEW: Delivery tracking times
+  startedAt: Date,
+  completedAt: Date,
+
+  // NEW: Route planning (pickup/dropoff)
+  pickupPoint: String,
+  dropoffPoint: String,
+  pickupCoordinates: {
+    latitude: Number,
+    longitude: Number
+  },
+  dropoffCoordinates: {
+    latitude: Number,
+    longitude: Number
+  },
+  routeDistance: String,
+  estimatedTime: String,
+
+  // Customer information
+  customerName: String,
+  customerEmail: String,
+  customerPhone: String
 }, { timestamps: true });
 
 const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema, 'driverallocations');
@@ -1405,6 +1435,112 @@ app.post('/createAllocation', async (req, res) => {
     res.json({ success: true, message: 'Allocation created successfully', data: newAllocation });
   } catch (error) {
     console.error('❌ Create allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update allocation (including driver location)
+app.put('/updateAllocation/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    // If updating driver location, add to location history
+    if (updateData.driverLocation) {
+      const allocation = await DriverAllocation.findById(id);
+      if (allocation) {
+        if (!allocation.locationHistory) {
+          allocation.locationHistory = [];
+        }
+        allocation.locationHistory.push({
+          latitude: updateData.driverLocation.latitude,
+          longitude: updateData.driverLocation.longitude,
+          timestamp: updateData.driverLocation.timestamp || new Date(),
+          speed: 0,
+          heading: 0
+        });
+        updateData.locationHistory = allocation.locationHistory;
+      }
+    }
+    
+    const updatedAllocation = await DriverAllocation.findByIdAndUpdate(
+      id,
+      { $set: updateData },
+      { new: true, runValidators: true }
+    );
+    
+    if (!updatedAllocation) {
+      return res.status(404).json({ success: false, message: 'Allocation not found' });
+    }
+    
+    console.log('✅ Updated allocation:', updatedAllocation.unitName);
+    res.json({ success: true, message: 'Allocation updated successfully', data: updatedAllocation });
+  } catch (error) {
+    console.error('❌ Update allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get live tracking for specific allocation
+app.get('/tracking/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const allocation = await DriverAllocation.findById(id);
+    
+    if (!allocation) {
+      return res.status(404).json({ success: false, message: 'Allocation not found' });
+    }
+    
+    // Return tracking data
+    const trackingData = {
+      allocationId: allocation._id,
+      unitName: allocation.unitName,
+      unitId: allocation.unitId,
+      assignedDriver: allocation.assignedDriver,
+      assignedAgent: allocation.assignedAgent,
+      status: allocation.status,
+      driverLocation: allocation.driverLocation,
+      pickupCoordinates: allocation.pickupCoordinates,
+      dropoffCoordinates: allocation.dropoffCoordinates,
+      routeDistance: allocation.routeDistance,
+      estimatedTime: allocation.estimatedTime,
+      startedAt: allocation.startedAt,
+      locationHistory: allocation.locationHistory || [],
+      customerName: allocation.customerName
+    };
+    
+    res.json({ success: true, data: trackingData });
+  } catch (error) {
+    console.error('❌ Get tracking error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get all active deliveries (In Transit status)
+app.get('/tracking/active/all', async (req, res) => {
+  try {
+    const activeDeliveries = await DriverAllocation.find({
+      status: 'In Transit'
+    }).sort({ startedAt: -1 });
+    
+    const trackingData = activeDeliveries.map(allocation => ({
+      allocationId: allocation._id,
+      unitName: allocation.unitName,
+      unitId: allocation.unitId,
+      assignedDriver: allocation.assignedDriver,
+      assignedAgent: allocation.assignedAgent,
+      driverLocation: allocation.driverLocation,
+      pickupCoordinates: allocation.pickupCoordinates,
+      dropoffCoordinates: allocation.dropoffCoordinates,
+      routeDistance: allocation.routeDistance,
+      estimatedTime: allocation.estimatedTime,
+      startedAt: allocation.startedAt,
+      customerName: allocation.customerName
+    }));
+    
+    res.json({ success: true, data: trackingData });
+  } catch (error) {
+    console.error('❌ Get active deliveries error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
