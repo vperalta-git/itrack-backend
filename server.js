@@ -532,17 +532,22 @@ app.post('/login', async (req, res) => {
       });
     }
 
-    // Find user in database by email only
+    // Find user in database by email OR username (support both)
+    const searchValue = email.toLowerCase().trim();
     const user = await User.findOne({
-      email: email.toLowerCase().trim()
+      $or: [
+        { email: searchValue },
+        { username: searchValue }
+      ]
     });
     
     if (!user) {
-      console.log('❌ User not found for:', email.toLowerCase().trim());
+      console.log('❌ User not found for:', searchValue);
+      console.log('🔍 Searched in email and username fields');
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    console.log('✅ User found:', user.email);
+    console.log('✅ User found:', user.email || user.username);
 
     let isValidLogin = false;
     let isTemporaryPassword = false;
@@ -600,10 +605,15 @@ app.post('/login', async (req, res) => {
     const response = {
       success: true,
       user: {
+        _id: user._id,
+        id: user._id,
         role: user.role,
-        accountName: user.accountName,
+        accountName: user.accountName || user.name,
         name: user.name || user.accountName,
-        email: user.email
+        email: user.email,
+        phoneNumber: user.phoneNumber || user.phoneno,
+        phoneNo: user.phoneno || user.phoneNumber,
+        username: user.username
       }
     };
 
