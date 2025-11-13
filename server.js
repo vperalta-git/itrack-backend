@@ -234,33 +234,25 @@ mongoose.connect(mongoURI)
   .then(() => console.log('✅ Connected to MongoDB Atlas'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
-// User Schema with Role Validation and Enhanced Password Management - SYNCED WITH WEB VERSION
+// User Schema - FULLY COMPATIBLE WITH WEB VERSION
+// Primary fields match web schema exactly, additional fields are optional
 const UserSchema = new mongoose.Schema({
-  // Core Authentication Fields
-  email: {
-    type: String,
-    required: true,
-    unique: true,
-    trim: true,
-    lowercase: true
-  },
+  // ===== WEB SCHEMA CORE FIELDS (REQUIRED) =====
+  name: String,           // Primary name field (web standard)
+  phoneno: String,        // Primary phone field (web standard)
+  email: String,          // Primary email field (web standard)
+  password: String,       // Primary password field (web standard)
+  role: String,           // Primary role field (web standard)
+  resetPasswordToken: String,    // Web standard
+  resetPasswordExpires: Date,    // Web standard
+  
+  // ===== MOBILE-SPECIFIC OPTIONAL FIELDS =====
   username: {
     type: String,
     trim: true
   },
-  password: {
-    type: String,
-    required: true
-  },
-  role: {
-    type: String,
-    required: true,
-    enum: ['Admin', 'Manager', 'Sales Agent', 'Driver', 'Supervisor', 'Dispatch'], // Synced with web version
-    default: 'Sales Agent'
-  },
   accountName: {
     type: String,
-    required: true,
     trim: true
   },
   isActive: {
@@ -271,9 +263,9 @@ const UserSchema = new mongoose.Schema({
     type: Date
   },
   
-  // Profile Enhancement Fields (Synced with web)
+  // Profile Enhancement Fields
   picture: {
-    type: String, // URL or base64 string
+    type: String,
     default: null
   },
   phoneNumber: {
@@ -288,8 +280,12 @@ const UserSchema = new mongoose.Schema({
     type: String,
     maxlength: 500
   },
+  personalDetails: {
+    type: String,
+    default: ''
+  },
   
-  // Employment Information (Synced with web)
+  // Employment Information
   employeeId: {
     type: String,
     trim: true
@@ -300,10 +296,10 @@ const UserSchema = new mongoose.Schema({
   },
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User' // Reference to manager
+    ref: 'User'
   },
   
-  // Emergency Contact (Synced with web)
+  // Emergency Contact
   emergencyContact: {
     type: String,
     trim: true
@@ -313,19 +309,17 @@ const UserSchema = new mongoose.Schema({
     trim: true
   },
   
-  // Address (Synced with web)
+  // Address
   address: {
     type: String,
     maxlength: 300
   },
   
-  // Password Reset & Temporary Password (Synced with web)
-  resetPasswordToken: String,
-  resetPasswordExpires: Date,
+  // Temporary Password (Mobile feature)
   temporaryPassword: { type: String },
   temporaryPasswordExpires: { type: Date },
   
-  // GPS tracking fields for drivers (Mobile specific)
+  // GPS tracking fields for drivers (Mobile-only feature)
   currentLocation: {
     latitude: { type: Number },
     longitude: { type: Number },
@@ -335,12 +329,7 @@ const UserSchema = new mongoose.Schema({
     lastUpdate: { type: Date }
   },
   
-  // Legacy compatibility fields (for existing data)
-  name: { type: String }, // Legacy field
-  phoneno: { type: String }, // Legacy field - maps to phoneNumber
-  personalDetails: { type: String, default: '' }, // Legacy field - maps to bio
-  
-  // Audit fields (Synced with web)
+  // Audit fields
   createdBy: {
     type: String,
     default: 'System'
@@ -350,27 +339,53 @@ const UserSchema = new mongoose.Schema({
     default: 'System'
   }
 }, {
-  timestamps: true // Automatically adds createdAt and updatedAt
+  timestamps: true,
+  strict: false  // Allow flexibility for web/mobile field differences
 });
 
-// Index for faster queries (Synced with web)
+// Index for faster queries
+UserSchema.index({ email: 1 });
 UserSchema.index({ username: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ assignedTo: 1 });
 UserSchema.index({ isActive: 1 });
 
-// Update the updatedBy field on save (Synced with web)
+// Pre-save hook for field synchronization and validation
 UserSchema.pre('save', function(next) {
+  // Update audit fields
   if (this.isModified() && !this.isNew) {
     this.updatedBy = this.updatedBy || 'System';
   }
   
-  // Legacy field mapping for compatibility
+  // ===== FIELD MAPPING FOR WEB/MOBILE COMPATIBILITY =====
+  
+  // Sync phoneno <-> phoneNumber (web uses phoneno, mobile uses phoneNumber)
   if (this.phoneno && !this.phoneNumber) {
     this.phoneNumber = this.phoneno;
   }
+  if (this.phoneNumber && !this.phoneno) {
+    this.phoneno = this.phoneNumber;
+  }
+  
+  // Sync name <-> accountName (web uses name, mobile uses accountName)
+  if (this.name && !this.accountName) {
+    this.accountName = this.name;
+  }
+  if (this.accountName && !this.name) {
+    this.name = this.accountName;
+  }
+  
+  // Sync personalDetails <-> bio
   if (this.personalDetails && !this.bio) {
     this.bio = this.personalDetails;
+  }
+  if (this.bio && !this.personalDetails) {
+    this.personalDetails = this.bio;
+  }
+  
+  // Set default username from email if not provided
+  if (!this.username && this.email) {
+    this.username = this.email.split('@')[0];
   }
   
   next();
