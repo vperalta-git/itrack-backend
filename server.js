@@ -875,18 +875,13 @@ app.post('/change-password', async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isCurrentPasswordValid) {
+    // Verify current password (plain text comparison)
+    if (currentPassword !== user.password) {
       return res.status(400).json({ success: false, message: 'Current password is incorrect' });
     }
 
-    // Hash new password
-    const saltRounds = 10;
-    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
-
-    // Update password
-    user.password = hashedNewPassword;
+    // Update password (plain text, no hashing)
+    user.password = newPassword;
     user.updatedAt = new Date();
     await user.save();
 
@@ -988,16 +983,12 @@ app.post('/createUser', async (req, res) => {
       });
     }
     
-    // Hash password
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-    
     const newUser = new User({
       // Web schema fields (primary)
       name: finalName,
       email: finalEmail,
       phoneno: finalPhone,
-      password: hashedPassword,
+      password: password, // Plain text password (no hashing)
       role: role || 'Sales Agent',
       
       // Mobile-specific fields (synced via pre-save hook)
@@ -1270,18 +1261,13 @@ app.post('/change-password', async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isCurrentPasswordValid) {
+    // Verify current password (plain text comparison)
+    if (currentPassword !== user.password) {
       return res.status(400).json({ success: false, message: 'Current password is incorrect' });
     }
 
-    // Hash new password
-    const saltRounds = 10;
-    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
-
-    // Update password
-    user.password = hashedNewPassword;
+    // Update password (plain text, no hashing)
+    user.password = newPassword;
     user.updatedAt = new Date();
     await user.save();
 
