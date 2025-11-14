@@ -240,7 +240,6 @@ const UserSchema = new mongoose.Schema({
   email: {
     type: String,
     required: true,
-    unique: true,
     trim: true,
     lowercase: true
   },
@@ -1135,7 +1134,7 @@ const InventorySchema = new mongoose.Schema({
   bodyColor: String,
   variation: { type: String, required: true },
   conductionNumber: { type: String, required: true },
-  vin: { type: String, required: true, unique: true },
+  vin: { type: String, required: true },
   engineNumber: String,
   keyNumber: String,
   plateNumber: String,
@@ -1251,6 +1250,53 @@ app.post('/createAllocation', async (req, res) => {
     res.json({ success: true, message: 'Allocation created successfully', data: newAllocation });
   } catch (error) {
     console.error('❌ Create allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update allocation
+app.put('/updateAllocation/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    console.log(`📋 Updating allocation ${id}:`, updateData);
+    
+    const updatedAllocation = await DriverAllocation.findByIdAndUpdate(
+      id,
+      { $set: updateData, updatedAt: new Date() },
+      { new: true, runValidators: true }
+    );
+    
+    if (!updatedAllocation) {
+      return res.status(404).json({ success: false, message: 'Allocation not found' });
+    }
+    
+    console.log('✅ Updated allocation:', updatedAllocation.unitName);
+    res.json({ success: true, message: 'Allocation updated successfully', data: updatedAllocation });
+  } catch (error) {
+    console.error('❌ Update allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Delete allocation
+app.delete('/deleteAllocation/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    console.log(`📋 Deleting allocation ${id}`);
+    
+    const deletedAllocation = await DriverAllocation.findByIdAndDelete(id);
+    
+    if (!deletedAllocation) {
+      return res.status(404).json({ success: false, message: 'Allocation not found' });
+    }
+    
+    console.log('✅ Deleted allocation:', deletedAllocation.unitName);
+    res.json({ success: true, message: 'Allocation deleted successfully', data: deletedAllocation });
+  } catch (error) {
+    console.error('❌ Delete allocation error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -2344,7 +2390,7 @@ app.post('/test/create-sample-data', async (req, res) => {
 // Create TestDriveVehicle model
 const testDriveVehicleSchema = new mongoose.Schema({
   unitName: { type: String, required: true },
-  unitId: { type: String, required: true, unique: true },
+  unitId: { type: String, required: true },
   bodyColor: { type: String, required: true },
   variation: { type: String, required: true },
   status: { type: String, enum: ['Available', 'In Use', 'Maintenance', 'Unavailable'], default: 'Available' },
