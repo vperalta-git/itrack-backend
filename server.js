@@ -234,25 +234,33 @@ mongoose.connect(mongoURI)
   .then(() => console.log('✅ Connected to MongoDB Atlas'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
-// User Schema - FULLY COMPATIBLE WITH WEB VERSION
-// Primary fields match web schema exactly, additional fields are optional
+// User Schema with Role Validation and Enhanced Password Management - SYNCED WITH WEB VERSION
 const UserSchema = new mongoose.Schema({
-  // ===== WEB SCHEMA CORE FIELDS (REQUIRED) =====
-  name: String,           // Primary name field (web standard)
-  phoneno: String,        // Primary phone field (web standard)
-  email: String,          // Primary email field (web standard)
-  password: String,       // Primary password field (web standard)
-  role: String,           // Primary role field (web standard)
-  resetPasswordToken: String,    // Web standard
-  resetPasswordExpires: Date,    // Web standard
-  
-  // ===== MOBILE-SPECIFIC OPTIONAL FIELDS =====
+  // Core Authentication Fields
+  email: {
+    type: String,
+    required: true,
+    unique: true,
+    trim: true,
+    lowercase: true
+  },
   username: {
     type: String,
     trim: true
   },
+  password: {
+    type: String,
+    required: true
+  },
+  role: {
+    type: String,
+    required: true,
+    enum: ['Admin', 'Manager', 'Sales Agent', 'Driver', 'Supervisor', 'Dispatch'], // Synced with web version
+    default: 'Sales Agent'
+  },
   accountName: {
     type: String,
+    required: true,
     trim: true
   },
   isActive: {
@@ -263,9 +271,9 @@ const UserSchema = new mongoose.Schema({
     type: Date
   },
   
-  // Profile Enhancement Fields
+  // Profile Enhancement Fields (Synced with web)
   picture: {
-    type: String,
+    type: String, // URL or base64 string
     default: null
   },
   phoneNumber: {
@@ -280,12 +288,8 @@ const UserSchema = new mongoose.Schema({
     type: String,
     maxlength: 500
   },
-  personalDetails: {
-    type: String,
-    default: ''
-  },
   
-  // Employment Information
+  // Employment Information (Synced with web)
   employeeId: {
     type: String,
     trim: true
@@ -296,10 +300,10 @@ const UserSchema = new mongoose.Schema({
   },
   assignedTo: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
+    ref: 'User' // Reference to manager
   },
   
-  // Emergency Contact
+  // Emergency Contact (Synced with web)
   emergencyContact: {
     type: String,
     trim: true
@@ -309,17 +313,19 @@ const UserSchema = new mongoose.Schema({
     trim: true
   },
   
-  // Address
+  // Address (Synced with web)
   address: {
     type: String,
     maxlength: 300
   },
   
-  // Temporary Password (Mobile feature)
+  // Password Reset & Temporary Password (Synced with web)
+  resetPasswordToken: String,
+  resetPasswordExpires: Date,
   temporaryPassword: { type: String },
   temporaryPasswordExpires: { type: Date },
   
-  // GPS tracking fields for drivers (Mobile-only feature)
+  // GPS tracking fields for drivers (Mobile specific)
   currentLocation: {
     latitude: { type: Number },
     longitude: { type: Number },
@@ -329,7 +335,12 @@ const UserSchema = new mongoose.Schema({
     lastUpdate: { type: Date }
   },
   
-  // Audit fields
+  // Legacy compatibility fields (for existing data)
+  name: { type: String }, // Legacy field
+  phoneno: { type: String }, // Legacy field - maps to phoneNumber
+  personalDetails: { type: String, default: '' }, // Legacy field - maps to bio
+  
+  // Audit fields (Synced with web)
   createdBy: {
     type: String,
     default: 'System'
@@ -339,53 +350,27 @@ const UserSchema = new mongoose.Schema({
     default: 'System'
   }
 }, {
-  timestamps: true,
-  strict: false  // Allow flexibility for web/mobile field differences
+  timestamps: true // Automatically adds createdAt and updatedAt
 });
 
-// Index for faster queries
-UserSchema.index({ email: 1 });
+// Index for faster queries (Synced with web)
 UserSchema.index({ username: 1 });
 UserSchema.index({ role: 1 });
 UserSchema.index({ assignedTo: 1 });
 UserSchema.index({ isActive: 1 });
 
-// Pre-save hook for field synchronization and validation
+// Update the updatedBy field on save (Synced with web)
 UserSchema.pre('save', function(next) {
-  // Update audit fields
   if (this.isModified() && !this.isNew) {
     this.updatedBy = this.updatedBy || 'System';
   }
   
-  // ===== FIELD MAPPING FOR WEB/MOBILE COMPATIBILITY =====
-  
-  // Sync phoneno <-> phoneNumber (web uses phoneno, mobile uses phoneNumber)
+  // Legacy field mapping for compatibility
   if (this.phoneno && !this.phoneNumber) {
     this.phoneNumber = this.phoneno;
   }
-  if (this.phoneNumber && !this.phoneno) {
-    this.phoneno = this.phoneNumber;
-  }
-  
-  // Sync name <-> accountName (web uses name, mobile uses accountName)
-  if (this.name && !this.accountName) {
-    this.accountName = this.name;
-  }
-  if (this.accountName && !this.name) {
-    this.name = this.accountName;
-  }
-  
-  // Sync personalDetails <-> bio
   if (this.personalDetails && !this.bio) {
     this.bio = this.personalDetails;
-  }
-  if (this.bio && !this.personalDetails) {
-    this.personalDetails = this.bio;
-  }
-  
-  // Set default username from email if not provided
-  if (!this.username && this.email) {
-    this.username = this.email.split('@')[0];
   }
   
   next();
@@ -515,37 +500,7 @@ const DriverAllocationSchema = new mongoose.Schema({
 
   readyForRelease: { type: Boolean, default: false },
   releasedAt: Date,
-  releasedBy: String,
-
-  // NEW: Driver Live Location Tracking
-  driverLocation: {
-    latitude: Number,
-    longitude: Number,
-    timestamp: Date
-  },
-
-  // NEW: Delivery tracking times
-  startedAt: Date,
-  completedAt: Date,
-
-  // NEW: Route planning (pickup/dropoff)
-  pickupPoint: String,
-  dropoffPoint: String,
-  pickupCoordinates: {
-    latitude: Number,
-    longitude: Number
-  },
-  dropoffCoordinates: {
-    latitude: Number,
-    longitude: Number
-  },
-  routeDistance: String,
-  estimatedTime: String,
-
-  // Customer information
-  customerName: String,
-  customerEmail: String,
-  customerPhone: String
+  releasedBy: String
 }, { timestamps: true });
 
 const DriverAllocation = mongoose.model('DriverAllocation', DriverAllocationSchema, 'driverallocations');
@@ -577,22 +532,17 @@ app.post('/login', async (req, res) => {
       });
     }
 
-    // Find user in database by email OR username (support both)
-    const searchValue = email.toLowerCase().trim();
+    // Find user in database by email only
     const user = await User.findOne({
-      $or: [
-        { email: searchValue },
-        { username: searchValue }
-      ]
+      email: email.toLowerCase().trim()
     });
     
     if (!user) {
-      console.log('❌ User not found for:', searchValue);
-      console.log('🔍 Searched in email and username fields');
+      console.log('❌ User not found for:', email.toLowerCase().trim());
       return res.status(401).json({ success: false, message: 'Invalid email or password' });
     }
 
-    console.log('✅ User found:', user.email || user.username);
+    console.log('✅ User found:', user.email);
 
     let isValidLogin = false;
     let isTemporaryPassword = false;
@@ -650,15 +600,10 @@ app.post('/login', async (req, res) => {
     const response = {
       success: true,
       user: {
-        _id: user._id,
-        id: user._id,
         role: user.role,
-        accountName: user.accountName || user.name,
+        accountName: user.accountName,
         name: user.name || user.accountName,
-        email: user.email,
-        phoneNumber: user.phoneNumber || user.phoneno,
-        phoneNo: user.phoneno || user.phoneNumber,
-        username: user.username
+        email: user.email
       }
     };
 
@@ -905,13 +850,18 @@ app.post('/change-password', async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Verify current password (plain text comparison)
-    if (currentPassword !== user.password) {
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentPasswordValid) {
       return res.status(400).json({ success: false, message: 'Current password is incorrect' });
     }
 
-    // Update password (plain text, no hashing)
-    user.password = newPassword;
+    // Hash new password
+    const saltRounds = 10;
+    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update password
+    user.password = hashedNewPassword;
     user.updatedAt = new Date();
     await user.save();
 
@@ -988,50 +938,31 @@ app.get('/api/getUsers', async (req, res) => {
   }
 });
 
-// Create new user (Mobile endpoint)
+// Create new user
 app.post('/createUser', async (req, res) => {
   try {
-    const { username, password, role, accountName, email, name, phoneno, assignedTo } = req.body;
+    const { username, password, role, accountName, email } = req.body;
     
-    // Support both web and mobile formats
-    const finalName = name || accountName;
-    const finalEmail = email;
-    const finalPhone = phoneno;
-    
-    // Check if user already exists (check both email and username)
-    const existingUser = await User.findOne({
-      $or: [
-        { email: finalEmail },
-        { username: username ? username.toLowerCase() : undefined }
-      ]
-    });
-    
+    // Check if user already exists
+    const existingUser = await User.findOne({ username: username.toLowerCase() });
     if (existingUser) {
-      return res.status(400).json({ 
-        success: false, 
-        message: existingUser.email === finalEmail ? 'Email already exists' : 'Username already exists' 
-      });
+      return res.status(400).json({ success: false, message: 'Username already exists' });
     }
     
+    // Hash password
+    const saltRounds = 10;
+    const hashedPassword = await bcrypt.hash(password, saltRounds);
+    
     const newUser = new User({
-      // Web schema fields (primary)
-      name: finalName,
-      email: finalEmail,
-      phoneno: finalPhone,
-      password: password, // Plain text password (no hashing)
-      role: role || 'Sales Agent',
-      
-      // Mobile-specific fields (synced via pre-save hook)
-      username: username ? username.toLowerCase() : (finalEmail ? finalEmail.split('@')[0] : undefined),
-      accountName: finalName,
-      phoneNumber: finalPhone,
-      
-      // Sales Agent specific field (mobile only)
-      assignedTo: assignedTo || undefined
+      username: username.toLowerCase(),
+      password: hashedPassword,
+      role: role || 'salesAgent',
+      accountName,
+      email
     });
     
     await newUser.save();
-    console.log('✅ Created user:', newUser.email || newUser.username);
+    console.log('✅ Created user:', newUser.username);
     
     // Remove password from response
     const userResponse = newUser.toObject();
@@ -1045,78 +976,14 @@ app.post('/createUser', async (req, res) => {
   }
 });
 
-// Create new user (Web compatibility endpoint)
-app.post('/api/createUser', async (req, res) => {
-  try {
-    const { name, phoneno, email, password, role, assignedTo } = req.body;
-    
-    console.log('📝 Web creating user:', { name, email, role });
-    
-    // Check if user already exists
-    const existingEmail = await User.findOne({ email: email });
-    if (existingEmail) {
-      return res.status(400).json({ error: 'Email already exists' });
-    }
-    
-    const existingPhone = await User.findOne({ phoneno: phoneno });
-    if (existingPhone) {
-      return res.status(400).json({ error: 'Phone number already exists' });
-    }
-    
-    // Create new user (password is stored as plain text per web backend standard)
-    const newUser = new User({
-      name,
-      phoneno,
-      email,
-      password, // Plain text as per web version
-      role,
-      assignedTo: assignedTo || undefined,
-      // Mobile fields will be synced via pre-save hook
-      username: email.split('@')[0],
-      accountName: name,
-      phoneNumber: phoneno
-    });
-    
-    await newUser.save();
-    console.log('✅ Web created user:', newUser.email);
-    
-    // Return format matching web backend (no password in response)
-    const userResponse = newUser.toObject();
-    delete userResponse.password;
-    delete userResponse.temporaryPassword;
-    
-    res.json(userResponse);
-  } catch (error) {
-    console.error('❌ Web create user error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Update user (Mobile endpoint)
+// Update user
 app.put('/updateUser/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const updateData = { ...req.body };
     
-    // Handle password updates if provided (keep as plain text for web compatibility)
-    // If web sends password, it's plain text; if mobile sends it, it might be hashed
-    // For safety, accept as-is since web version uses plain text
-    
-    // Sync web/mobile field names if provided
-    if (updateData.name && !updateData.accountName) {
-      updateData.accountName = updateData.name;
-    }
-    if (updateData.phoneno && !updateData.phoneNumber) {
-      updateData.phoneNumber = updateData.phoneno;
-    }
-    if (updateData.accountName && !updateData.name) {
-      updateData.name = updateData.accountName;
-    }
-    if (updateData.phoneNumber && !updateData.phoneno) {
-      updateData.phoneno = updateData.phoneNumber;
-    }
-    
-    // Remove sensitive temporary password field
+    // Remove sensitive fields from update
+    delete updateData.password;
     delete updateData.temporaryPassword;
     
     const updatedUser = await User.findByIdAndUpdate(id, updateData, { new: true }).select('-password -temporaryPassword');
@@ -1125,7 +992,7 @@ app.put('/updateUser/:id', async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
     
-    console.log('✅ Updated user:', updatedUser.email || updatedUser.username);
+    console.log('✅ Updated user:', updatedUser.username);
     res.json({ success: true, message: 'User updated successfully', data: updatedUser });
   } catch (error) {
     console.error('❌ Update user error:', error);
@@ -1133,42 +1000,7 @@ app.put('/updateUser/:id', async (req, res) => {
   }
 });
 
-// Update user (Web compatibility endpoint)
-app.put('/api/updateUser/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = { ...req.body };
-    
-    console.log('📝 Web updating user:', id, 'with data:', Object.keys(updateData));
-    
-    // Sync web/mobile field names
-    if (updateData.name) {
-      updateData.accountName = updateData.name;
-    }
-    if (updateData.phoneno) {
-      updateData.phoneNumber = updateData.phoneno;
-    }
-    
-    const updatedUser = await User.findByIdAndUpdate(id, updateData, { new: true }).select('-temporaryPassword');
-    
-    if (!updatedUser) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    console.log('✅ Web updated user:', updatedUser.email);
-    
-    // Return format matching web backend (password included as per web version)
-    const userResponse = updatedUser.toObject();
-    delete userResponse.temporaryPassword;
-    
-    res.json(userResponse);
-  } catch (error) {
-    console.error('❌ Web update user error:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Delete user (Mobile endpoint)
+// Delete user
 app.delete('/deleteUser/:id', async (req, res) => {
   try {
     const { id } = req.params;
@@ -1179,32 +1011,11 @@ app.delete('/deleteUser/:id', async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
     
-    console.log('✅ Deleted user:', deletedUser.email || deletedUser.username);
+    console.log('✅ Deleted user:', deletedUser.username);
     res.json({ success: true, message: 'User deleted successfully' });
   } catch (error) {
     console.error('❌ Delete user error:', error);
     res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Delete user (Web compatibility endpoint)
-app.delete('/api/deleteUser/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    console.log('🗑️ Web deleting user:', id);
-    
-    const deletedUser = await User.findByIdAndDelete(id);
-    
-    if (!deletedUser) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    
-    console.log('✅ Web deleted user:', deletedUser.email);
-    res.json({ message: 'User deleted successfully' });
-  } catch (error) {
-    console.error('❌ Web delete user error:', error);
-    res.status(500).json({ error: error.message });
   }
 });
 
@@ -1291,13 +1102,18 @@ app.post('/change-password', async (req, res) => {
       return res.status(404).json({ success: false, message: 'User not found' });
     }
 
-    // Verify current password (plain text comparison)
-    if (currentPassword !== user.password) {
+    // Verify current password
+    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
+    if (!isCurrentPasswordValid) {
       return res.status(400).json({ success: false, message: 'Current password is incorrect' });
     }
 
-    // Update password (plain text, no hashing)
-    user.password = newPassword;
+    // Hash new password
+    const saltRounds = 10;
+    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
+
+    // Update password
+    user.password = hashedNewPassword;
     user.updatedAt = new Date();
     await user.save();
 
@@ -1435,112 +1251,6 @@ app.post('/createAllocation', async (req, res) => {
     res.json({ success: true, message: 'Allocation created successfully', data: newAllocation });
   } catch (error) {
     console.error('❌ Create allocation error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Update allocation (including driver location)
-app.put('/updateAllocation/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const updateData = req.body;
-    
-    // If updating driver location, add to location history
-    if (updateData.driverLocation) {
-      const allocation = await DriverAllocation.findById(id);
-      if (allocation) {
-        if (!allocation.locationHistory) {
-          allocation.locationHistory = [];
-        }
-        allocation.locationHistory.push({
-          latitude: updateData.driverLocation.latitude,
-          longitude: updateData.driverLocation.longitude,
-          timestamp: updateData.driverLocation.timestamp || new Date(),
-          speed: 0,
-          heading: 0
-        });
-        updateData.locationHistory = allocation.locationHistory;
-      }
-    }
-    
-    const updatedAllocation = await DriverAllocation.findByIdAndUpdate(
-      id,
-      { $set: updateData },
-      { new: true, runValidators: true }
-    );
-    
-    if (!updatedAllocation) {
-      return res.status(404).json({ success: false, message: 'Allocation not found' });
-    }
-    
-    console.log('✅ Updated allocation:', updatedAllocation.unitName);
-    res.json({ success: true, message: 'Allocation updated successfully', data: updatedAllocation });
-  } catch (error) {
-    console.error('❌ Update allocation error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Get live tracking for specific allocation
-app.get('/tracking/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const allocation = await DriverAllocation.findById(id);
-    
-    if (!allocation) {
-      return res.status(404).json({ success: false, message: 'Allocation not found' });
-    }
-    
-    // Return tracking data
-    const trackingData = {
-      allocationId: allocation._id,
-      unitName: allocation.unitName,
-      unitId: allocation.unitId,
-      assignedDriver: allocation.assignedDriver,
-      assignedAgent: allocation.assignedAgent,
-      status: allocation.status,
-      driverLocation: allocation.driverLocation,
-      pickupCoordinates: allocation.pickupCoordinates,
-      dropoffCoordinates: allocation.dropoffCoordinates,
-      routeDistance: allocation.routeDistance,
-      estimatedTime: allocation.estimatedTime,
-      startedAt: allocation.startedAt,
-      locationHistory: allocation.locationHistory || [],
-      customerName: allocation.customerName
-    };
-    
-    res.json({ success: true, data: trackingData });
-  } catch (error) {
-    console.error('❌ Get tracking error:', error);
-    res.status(500).json({ success: false, error: error.message });
-  }
-});
-
-// Get all active deliveries (In Transit status)
-app.get('/tracking/active/all', async (req, res) => {
-  try {
-    const activeDeliveries = await DriverAllocation.find({
-      status: 'In Transit'
-    }).sort({ startedAt: -1 });
-    
-    const trackingData = activeDeliveries.map(allocation => ({
-      allocationId: allocation._id,
-      unitName: allocation.unitName,
-      unitId: allocation.unitId,
-      assignedDriver: allocation.assignedDriver,
-      assignedAgent: allocation.assignedAgent,
-      driverLocation: allocation.driverLocation,
-      pickupCoordinates: allocation.pickupCoordinates,
-      dropoffCoordinates: allocation.dropoffCoordinates,
-      routeDistance: allocation.routeDistance,
-      estimatedTime: allocation.estimatedTime,
-      startedAt: allocation.startedAt,
-      customerName: allocation.customerName
-    }));
-    
-    res.json({ success: true, data: trackingData });
-  } catch (error) {
-    console.error('❌ Get active deliveries error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -3267,13 +2977,9 @@ app.listen(PORT, HOST, () => {
   console.log('');
   console.log('  👥 USER MANAGEMENT:');
   console.log('    - GET    /getUsers');
-  console.log('    - GET    /api/getUsers (web)');
-  console.log('    - POST   /createUser (mobile)');
-  console.log('    - POST   /api/createUser (web)');
-  console.log('    - PUT    /updateUser/:id (mobile)');
-  console.log('    - PUT    /api/updateUser/:id (web)');
-  console.log('    - DELETE /deleteUser/:id (mobile)');
-  console.log('    - DELETE /api/deleteUser/:id (web)');
+  console.log('    - POST   /createUser');
+  console.log('    - PUT    /updateUser/:id');
+  console.log('    - DELETE /deleteUser/:id');
   console.log('');
   console.log('  👤 PROFILE MANAGEMENT:');
   console.log('    - GET    /api/getUser/:id');
