@@ -1184,7 +1184,7 @@ app.get('/getStock', async (req, res) => {
 // Create new stock item
 app.post('/createStock', async (req, res) => {
   try {
-    const { unitName, unitId, bodyColor, variation, conductionNumber, quantity } = req.body;
+    const { unitName, unitId, bodyColor, variation, conductionNumber, quantity, addedBy } = req.body;
     
     const newStock = new Inventory({
       unitName,
@@ -1196,6 +1196,24 @@ app.post('/createStock', async (req, res) => {
     });
     
     await newStock.save();
+    
+    // Log audit trail for inventory creation
+    await logAuditTrail(
+      'create',
+      'Inventory',
+      newStock._id,
+      addedBy || 'System',
+      {
+        after: {
+          unitName: newStock.unitName,
+          unitId: newStock.unitId,
+          variation: newStock.variation,
+          bodyColor: newStock.bodyColor,
+          status: newStock.status
+        }
+      }
+    );
+    
     console.log('✅ Created stock:', newStock.unitName);
     res.json({ success: true, message: 'Stock created successfully', data: newStock });
   } catch (error) {
@@ -1210,10 +1228,37 @@ app.put('/updateStock/:id', async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
     
+    // Get before state for audit logging
+    const beforeState = await Inventory.findById(id);
+    
     const updatedStock = await Inventory.findByIdAndUpdate(id, updateData, { new: true });
     
     if (!updatedStock) {
       return res.status(404).json({ success: false, message: 'Stock item not found' });
+    }
+    
+    // Log audit trail for inventory update
+    if (beforeState) {
+      await logAuditTrail(
+        'update',
+        'Inventory',
+        updatedStock._id,
+        updateData.updatedBy || updateData.lastUpdatedBy || 'System',
+        {
+          before: {
+            unitName: beforeState.unitName,
+            status: beforeState.status,
+            assignedAgent: beforeState.assignedAgent,
+            bodyColor: beforeState.bodyColor
+          },
+          after: {
+            unitName: updatedStock.unitName,
+            status: updatedStock.status,
+            assignedAgent: updatedStock.assignedAgent,
+            bodyColor: updatedStock.bodyColor
+          }
+        }
+      );
     }
     
     console.log('✅ Updated stock:', updatedStock.unitName);
@@ -1234,6 +1279,22 @@ app.delete('/deleteStock/:id', async (req, res) => {
     if (!deletedStock) {
       return res.status(404).json({ success: false, message: 'Stock item not found' });
     }
+    
+    // Log audit trail for inventory deletion
+    await logAuditTrail(
+      'delete',
+      'Inventory',
+      deletedStock._id,
+      'System',
+      {
+        before: {
+          unitName: deletedStock.unitName,
+          unitId: deletedStock.unitId,
+          variation: deletedStock.variation,
+          status: deletedStock.status
+        }
+      }
+    );
     
     console.log('✅ Deleted stock:', deletedStock.unitName);
     res.json({ success: true, message: 'Stock deleted successfully' });
@@ -1456,6 +1517,23 @@ app.post('/api/dispatch/assignments', async (req, res) => {
       console.log(`✅ Updated vehicle ${assignmentData.unitId} status to "Preparing"`);
     }
     
+    // Log audit trail
+    await logAuditTrail(
+      'create',
+      'DispatchAssignment',
+      savedAssignment._id,
+      assignmentData.assignedBy || 'System',
+      {
+        after: {
+          unitName: assignmentData.unitName,
+          unitId: assignmentData.unitId,
+          assignedDriver: assignmentData.assignedDriver,
+          processes: assignmentData.processes,
+          status: 'Assigned to Dispatch'
+        }
+      }
+    );
+    
     console.log('✅ Dispatch assignment created:', savedAssignment._id);
     res.json({ 
       success: true, 
@@ -1530,6 +1608,25 @@ app.put('/api/dispatch/assignments/:id/process', async (req, res) => {
     }
     
     const updatedAssignment = await assignment.save();
+    
+    // Log audit trail for task completion
+    await logAuditTrail(
+      'update',
+      'DispatchTask',
+      assignment._id,
+      completedBy || 'System',
+      {
+        before: { processStatus: { [processId]: !completed } },
+        after: { 
+          processStatus: { [processId]: completed },
+          processName: processId,
+          unitName: assignment.unitName,
+          unitId: assignment.unitId,
+          overallProgress: assignment.overallProgress,
+          status: assignment.status
+        }
+      }
+    );
     
     console.log('✅ Process updated successfully');
     res.json({
@@ -2206,6 +2303,23 @@ app.post('/driver-allocations', async (req, res) => {
     console.log('Creating driver allocation:', req.body);
     const newAllocation = new DriverAllocation(req.body);
     await newAllocation.save();
+    
+    // Log audit trail for driver allocation
+    await logAuditTrail(
+      'create',
+      'DriverAllocation',
+      newAllocation._id,
+      req.body.allocatedBy || 'System',
+      {
+        after: {
+          unitName: req.body.unitName,
+          unitId: req.body.unitId,
+          assignedDriver: req.body.assignedDriver,
+          status: req.body.status || 'Pending'
+        }
+      }
+    );
+    
     res.json({ success: true, allocation: newAllocation });
   } catch (err) {
     console.error('Error creating driver allocation:', err);
@@ -2217,6 +2331,10 @@ app.post('/driver-allocations', async (req, res) => {
 app.patch('/driver-allocations/:id', async (req, res) => {
   try {
     console.log(`Updating allocation ${req.params.id} with:`, req.body);
+    
+    // Get before state for audit logging
+    const beforeState = await DriverAllocation.findById(req.params.id);
+    
     const updated = await DriverAllocation.findByIdAndUpdate(req.params.id, { $set: req.body }, { new: true });
     if (!updated) return res.status(404).json({ success: false, message: 'Allocation not found' });
     
@@ -2242,6 +2360,29 @@ app.patch('/driver-allocations/:id', async (req, res) => {
         );
         console.log(`✅ Updated vehicle ${updated.unitId} status to "${newVehicleStatus}"`);
       }
+    }
+    
+    // Log audit trail for allocation update (delivery)
+    if (beforeState) {
+      await logAuditTrail(
+        'update',
+        'DriverAllocation',
+        updated._id,
+        req.body.updatedBy || 'System',
+        {
+          before: {
+            status: beforeState.status,
+            unitName: beforeState.unitName,
+            unitId: beforeState.unitId
+          },
+          after: {
+            status: updated.status,
+            unitName: updated.unitName,
+            unitId: updated.unitId,
+            assignedDriver: updated.assignedDriver
+          }
+        }
+      );
     }
     
     res.json({ success: true, allocation: updated });
@@ -2374,6 +2515,25 @@ const AuditTrailSchema = new mongoose.Schema({
 });
 
 const AuditTrail = mongoose.model('AuditTrail', AuditTrailSchema, 'audittrails');
+
+// Helper function to log audit trail
+const logAuditTrail = async (action, resource, resourceId, performedBy, details = {}) => {
+  try {
+    const auditEntry = new AuditTrail({
+      action,
+      resource,
+      resourceId,
+      performedBy,
+      details,
+      timestamp: new Date()
+    });
+    await auditEntry.save();
+    console.log(`📝 Audit logged: ${action} on ${resource} by ${performedBy}`);
+  } catch (error) {
+    console.error('❌ Error logging audit trail:', error);
+    // Don't throw error - audit logging failure shouldn't break the main operation
+  }
+};
 
 // Web-compatible audit trail endpoint (matches web version format)
 app.get('/api/audit-trail', async (req, res) => {
@@ -2511,6 +2671,23 @@ app.post('/api/releases', async (req, res) => {
       );
       console.log(`✅ Updated vehicle ${updatedAllocation.unitId} status to "Released"`);
     }
+    
+    // Log audit trail for release
+    await logAuditTrail(
+      'create',
+      'VehicleRelease',
+      updatedAllocation._id,
+      releaseData.releasedBy || 'System',
+      {
+        after: {
+          unitName: updatedAllocation.unitName,
+          unitId: updatedAllocation.unitId,
+          assignedDriver: updatedAllocation.assignedDriver,
+          releasedAt: releaseData.releasedAt,
+          status: 'Released'
+        }
+      }
+    );
     
     console.log('✅ Vehicle released successfully:', updatedAllocation);
     res.json({ 
