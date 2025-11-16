@@ -80,7 +80,7 @@ exports.createAllocation = async (req, res) => {
       assignedDriver: driver.username,
       assignedAgent: assignedAgent || null,
       requestedProcesses: requestedProcesses || ['delivery_to_isuzu_pasig'],
-      status: 'Assigned',
+      status: 'Pending',
       allocatedBy: allocatedBy || 'Admin',
       date: new Date()
     });
@@ -203,7 +203,7 @@ exports.createDispatchAssignment = async (req, res) => {
       variation: variation || 'Standard',
       assignedDriver: driver.username,
       requestedProcesses: requestedProcesses || ['delivery_to_isuzu_pasig'],
-      status: 'Assigned',
+      status: 'Pending',
       priority,
       notes,
       allocatedBy: 'Dispatch',

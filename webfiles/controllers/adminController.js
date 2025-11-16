@@ -147,7 +147,7 @@ exports.assignVehicle = async (req, res) => {
       assignedDriver: driver.username,
       assignedAgent: agent ? agent.username : null,
       requestedProcesses: processes || ['delivery_to_isuzu_pasig'],
-      status: 'Assigned',
+      status: 'Pending',
       allocatedBy: 'Admin',
       date: new Date()
     });
