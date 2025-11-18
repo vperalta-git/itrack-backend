@@ -13,6 +13,7 @@ import axios from 'axios';
 import logo from '../icons/itrackwhite.png'; 
 import { getCurrentUser } from '../getCurrentUser';
 import testDriveIcon from '../icons/testdrive.png'; // <--
+import allocationIcon from '../icons/stocks.png'; // Using stocks icon for unit allocation
 
 import '../css/Sidebar.css';
 
@@ -31,7 +32,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
   { name: "Dashboard", icon: dashboardIcon, path: "/dashboard" },
   
   { name: "Vehicle Stocks", icon: stocksIcon, path: "/inventory" },
-  { name: "Vehicle Preperation", icon: requestIcon, path: "/servicerequest" },
+  { name: "Unit Allocation", icon: allocationIcon, path: "/unitallocation" },
+  { name: "Vehicle Preparation and Release", icon: requestIcon, path: "/servicerequest" },
   // { name: "Vehicle Shipments", icon: shipmentsIcon, path: "/shipments" },
   { name: "Driver Allocation", icon: driverIcon, path: "/driverallocation" },
   { name: "Test Drive", icon: testDriveIcon, path: "/testdrive" }, // 
@@ -45,7 +47,8 @@ const Sidebar = ({ sidebarOpen, setSidebarOpen }) => {
         'Dashboard',
         'Reports',
         'Vehicle Stocks',
-        'Vehicle Preperation',
+        'Unit Allocation',
+        'Vehicle Preparation and Release',
         'Vehicle Shipments',
         'Test Drive',
       ].includes(item.name))

@@ -21,7 +21,11 @@ const DriverallocationSchema = new mongoose.Schema({
     address: String,
     customerName: String,
     contactNumber: String
-  }
+  },
+  // Completion tracking fields
+  completedAt: Date, // When the delivery was marked as completed
+  completedBy: String, // Driver name who completed the delivery
+  completionTime: Date // Time when delivered (before marked as completed)
 });
 
 const DriverallocationModel = mongoose.model("driverallocation", DriverallocationSchema);
