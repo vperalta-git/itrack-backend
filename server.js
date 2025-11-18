@@ -1228,6 +1228,9 @@ app.put('/updateStock/:id', async (req, res) => {
     const { id } = req.params;
     const updateData = req.body;
     
+    // Remove assignedAgent from update data - should only be managed through Unit Allocation
+    delete updateData.assignedAgent;
+    
     // Get before state for audit logging
     const beforeState = await Inventory.findById(id);
     
