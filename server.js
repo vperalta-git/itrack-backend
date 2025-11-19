@@ -1413,7 +1413,19 @@ app.delete('/deleteAllocation/:id', async (req, res) => {
 
 // ========== UNIT ALLOCATION ENDPOINTS (Sales Agent Assignment) ==========
 
-const UnitAllocation = require('./webfiles/models/UnitAllocation');
+// UnitAllocation Schema - for unit allocations to sales agents
+const UnitAllocationSchema = new mongoose.Schema({
+  unitName: { type: String, required: true },
+  unitId: { type: String, required: true },
+  bodyColor: String,
+  variation: String,
+  assignedAgent: { type: String, required: true }, // Sales agent name
+  allocatedBy: String, // Manager/Admin who allocated
+  allocationDate: { type: Date, default: Date.now },
+  notes: String,
+}, { timestamps: true });
+
+const UnitAllocation = mongoose.model('UnitAllocation', UnitAllocationSchema, 'unitallocations');
 
 // Get all unit allocations
 app.get('/api/getUnitAllocations', async (req, res) => {
