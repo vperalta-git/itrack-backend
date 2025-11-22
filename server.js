@@ -842,55 +842,6 @@ app.post('/api/forgot-password', async (req, res) => {
   }
 });
 
-// Change Password - For logged-in users
-app.post('/change-password', async (req, res) => {
-  try {
-    const { currentPassword, newPassword } = req.body;
-    console.log('🔐 Change password request for user:', req.session?.user?.username);
-
-    // Check if user is logged in
-    if (!req.session?.user) {
-      return res.status(401).json({ success: false, message: 'Not authenticated' });
-    }
-
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ success: false, message: 'Current password and new password are required' });
-    }
-
-    if (newPassword.length < 6) {
-      return res.status(400).json({ success: false, message: 'New password must be at least 6 characters long' });
-    }
-
-    // Find user
-    const user = await User.findById(req.session.user.id);
-    if (!user) {
-      return res.status(404).json({ success: false, message: 'User not found' });
-    }
-
-    // Verify current password
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isCurrentPasswordValid) {
-      return res.status(400).json({ success: false, message: 'Current password is incorrect' });
-    }
-
-    // Hash new password
-    const saltRounds = 10;
-    const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
-
-    // Update password
-    user.password = hashedNewPassword;
-    user.updatedAt = new Date();
-    await user.save();
-
-    console.log('✅ Password changed successfully for user:', user.username);
-    res.json({ success: true, message: 'Password changed successfully' });
-
-  } catch (error) {
-    console.error('❌ Change password error:', error);
-    res.status(500).json({ success: false, message: 'Server error' });
-  }
-});
-
 // Get current user info (for profile)
 app.get('/profile', (req, res) => {
   try {
@@ -3236,83 +3187,7 @@ app.delete('/api/testdrive-vehicles/:id', async (req, res) => {
   }
 });
 
-// ========== AUDIT TRAIL & HISTORY ==========
-
-// Get system audit trail
-app.get('/api/audit-trail', async (req, res) => {
-  try {
-    console.log('📊 Fetching audit trail...');
-    
-    // Get recent activities from various collections
-    const activities = [];
-    
-    // Recent allocations
-    const recentAllocations = await DriverAllocation.find({})
-      .sort({ createdAt: -1 })
-      .limit(10);
-    
-    recentAllocations.forEach(allocation => {
-      activities.push({
-        _id: allocation._id,
-        type: 'allocation',
-        action: 'Vehicle Assigned',
-        description: `${allocation.unitName} assigned to ${allocation.assignedDriver}`,
-        user: allocation.allocatedBy || 'System',
-        timestamp: allocation.createdAt,
-        details: {
-          unitName: allocation.unitName,
-          unitId: allocation.unitId,
-          driver: allocation.assignedDriver,
-          status: allocation.status
-        }
-      });
-    });
-    
-    // Recent user creations (if createdAt field exists)
-    try {
-      const recentUsers = await User.find({ createdAt: { $exists: true } })
-        .sort({ createdAt: -1 })
-        .limit(5);
-      
-      recentUsers.forEach(user => {
-        activities.push({
-          _id: user._id,
-          type: 'user',
-          action: 'User Created',
-          description: `New ${user.role} account created: ${user.accountName}`,
-          user: 'Admin',
-          timestamp: user.createdAt,
-          details: {
-            role: user.role,
-            email: user.email,
-            accountName: user.accountName
-          }
-        });
-      });
-    } catch (userError) {
-      console.log('Note: User createdAt field not available');
-    }
-    
-    // Sort all activities by timestamp (newest first)
-    activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-    
-    console.log(`✅ Found ${activities.length} audit trail entries`);
-    res.json({
-      success: true,
-      data: activities.slice(0, 20), // Return top 20 most recent
-      count: activities.length
-    });
-  } catch (error) {
-    console.error('❌ Error fetching audit trail:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch audit trail',
-      details: error.message
-    });
-  }
-});
-
-// API Configuration endpoint
+// ========== RELEASE MANAGEMENT (kept separate, no duplicate) ==========
 app.get('/api/config', (req, res) => {
   const baseUrl = `http://${req.get('host')}`;
   
