@@ -52,18 +52,10 @@ app.use(session({
   }
 }));
 
-// CORS configuration - Updated for production security
-const allowedOrigins = process.env.NODE_ENV === 'production' 
-  ? [
-      'https://itrack-backend-1.onrender.com',
-      'https://your-frontend-domain.com', // Add your frontend domain
-      /\.onrender\.com$/ // Allow all Render.com subdomains
-    ]
-  : true; // Allow all origins in development
-
+// CORS configuration - Allow all origins for mobile app support
 app.use(cors({
   credentials: true,
-  origin: allowedOrigins
+  origin: true // Allow all origins (needed for mobile apps)
 }));
 app.use(express.json({ limit: '50mb' })); // Support larger payloads for profile pictures
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
