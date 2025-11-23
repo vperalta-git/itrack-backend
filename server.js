@@ -1408,6 +1408,46 @@ app.delete('/deleteAllocation/:id', async (req, res) => {
   }
 });
 
+// Complete allocation - mark as delivered and calculate actual duration
+app.post('/completeAllocation', async (req, res) => {
+  try {
+    const { allocationId } = req.body;
+    
+    console.log(`📋 Completing allocation ${allocationId}`);
+    
+    const allocation = await DriverAllocation.findById(allocationId);
+    
+    if (!allocation) {
+      return res.status(404).json({ success: false, message: 'Allocation not found' });
+    }
+    
+    const now = new Date();
+    const actualDuration = allocation.routeInfo?.routeStarted 
+      ? Math.floor((now - new Date(allocation.routeInfo.routeStarted)) / 1000) 
+      : null;
+    
+    // Update allocation status to Delivered and set completion time
+    allocation.status = 'Delivered';
+    if (!allocation.routeInfo) {
+      allocation.routeInfo = {};
+    }
+    allocation.routeInfo.routeCompleted = now;
+    allocation.routeInfo.actualDuration = actualDuration;
+    
+    await allocation.save();
+    
+    console.log(`✅ Completed allocation ${allocation.unitName} - Actual duration: ${actualDuration}s`);
+    res.json({ 
+      success: true, 
+      message: 'Delivery completed successfully', 
+      data: allocation 
+    });
+  } catch (error) {
+    console.error('❌ Complete allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ========== UNIT ALLOCATION ENDPOINTS (Sales Agent Assignment) ==========
 
 // Define UnitAllocation schema
