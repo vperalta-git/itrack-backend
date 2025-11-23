@@ -1410,7 +1410,18 @@ app.delete('/deleteAllocation/:id', async (req, res) => {
 
 // ========== UNIT ALLOCATION ENDPOINTS (Sales Agent Assignment) ==========
 
-const UnitAllocation = require('./webfiles/models/UnitAllocation');
+// Define UnitAllocation schema
+const unitAllocationSchema = new mongoose.Schema({
+  unitId: { type: String, required: true },
+  unitName: { type: String, required: true },
+  assignedAgent: { type: String, required: true },
+  allocatedBy: String,
+  status: { type: String, default: 'Active' },
+  createdAt: { type: Date, default: Date.now },
+  updatedAt: Date
+});
+
+const UnitAllocation = mongoose.model('UnitAllocation', unitAllocationSchema);
 
 // Get all unit allocations
 app.get('/api/getUnitAllocations', async (req, res) => {
