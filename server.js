@@ -2772,24 +2772,42 @@ app.patch('/driver-allocations/:id', async (req, res) => {
 
 // Service Request Schema
 const ServiceRequestSchema = new mongoose.Schema({
-  vehicleId: String,
-  unitName: String,
-  unitId: String,
-  requestType: String,
-  description: String,
-  requestedBy: String,
+  unitName: { type: String, required: true },
+  unitId: { type: String, required: true },
+  service: { type: [String], required: true }, // Array of requested services
+  serviceTime: Date,
   status: { type: String, default: 'Pending' },
-  priority: { type: String, default: 'Normal' },
+  preparedBy: String,
+  dateCreated: { type: Date, default: Date.now },
   completedAt: Date,
-  completedBy: String
+  completedBy: String,
+  dispatchedFrom: { type: String, default: 'System' },
+  completedServices: { type: [String], default: [] },
+  pendingServices: { type: [String], default: [] },
+  readyForRelease: { type: Boolean, default: false },
+  releasedToCustomer: { type: Boolean, default: false },
+  releasedBy: String,
+  releasedAt: Date
 }, { timestamps: true });
+
 const Servicerequest = mongoose.model('Servicerequest', ServiceRequestSchema, 'servicerequests');
 
 // Get service requests
 app.get('/getRequest', async (req, res) => {
   try {
-    const requests = await Servicerequest.find({}).sort({ createdAt: -1 });
+    console.log('📥 GET /getRequest called');
+    
+    const requests = await Servicerequest.find({}).sort({ createdAt: -1 }).lean();
+    
     console.log(`📊 Found ${requests.length} service requests`);
+    
+    if (requests.length > 0) {
+      console.log('Latest 3 requests:');
+      requests.slice(0, 3).forEach((req, idx) => {
+        console.log(`  ${idx + 1}. ${req.unitName} - ${req.status} (${req._id})`);
+      });
+    }
+    
     res.json({ success: true, data: requests });
   } catch (error) {
     console.error('❌ Get requests error:', error);
@@ -3839,22 +3857,176 @@ app.get('/getServiceRequests', async (req, res) => {
 
 app.post('/createServiceRequest', async (req, res) => {
   try {
-    const newRequest = new DriverAllocation({
-      ...req.body,
-      status: 'Pending'
+    console.log('📥 Received createServiceRequest');
+    console.log('Body:', JSON.stringify(req.body, null, 2));
+    console.log('📊 Database:', mongoose.connection.db.databaseName);
+    console.log('📊 Collection: servicerequests');
+    
+    // Create new service request with the data from frontend
+    const newRequest = new Servicerequest(req.body);
+    
+    console.log('💾 Saving to database...');
+    const savedRequest = await newRequest.save();
+    
+    console.log('✅ Saved successfully!');
+    console.log('Document ID:', savedRequest._id.toString());
+    console.log('Unit Name:', savedRequest.unitName);
+    console.log('Status:', savedRequest.status);
+    console.log('Services:', savedRequest.service);
+    
+    // Verify it exists
+    const count = await Servicerequest.countDocuments({});
+    console.log('📊 Total service requests in database:', count);
+    
+    // Double check by fetching it back
+    const verify = await Servicerequest.findById(savedRequest._id);
+    console.log('🔍 Verification - Document exists:', !!verify);
+    
+    res.json({ 
+      success: true, 
+      data: savedRequest,
+      message: 'Service request created successfully'
     });
-    await newRequest.save();
-    res.json({ success: true, data: newRequest });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error('❌ Error creating service request:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
   }
 });
 
 app.put('/updateServiceRequest/:id', async (req, res) => {
   try {
-    const updated = await DriverAllocation.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    console.log(`📝 PUT /updateServiceRequest/${req.params.id}`);
+    console.log('Update data:', JSON.stringify(req.body, null, 2));
+    
+    const updated = await Servicerequest.findByIdAndUpdate(
+      req.params.id, 
+      req.body, 
+      { new: true, runValidators: true }
+    );
+    
+    if (!updated) {
+      console.log('❌ Service request not found');
+      return res.status(404).json({ success: false, message: 'Service request not found' });
+    }
+    
+    console.log('✅ Updated successfully:', {
+      unitName: updated.unitName,
+      status: updated.status,
+      completedServices: updated.completedServices,
+      pendingServices: updated.pendingServices
+    });
+    
     res.json({ success: true, data: updated });
   } catch (error) {
+    console.error('❌ Error updating service request:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Delete service request
+app.delete('/deleteServiceRequest/:id', async (req, res) => {
+  try {
+    console.log(`🗑️ DELETE /deleteServiceRequest/${req.params.id}`);
+    
+    const deleted = await Servicerequest.findByIdAndDelete(req.params.id);
+    
+    if (!deleted) {
+      console.log('❌ Service request not found');
+      return res.status(404).json({ success: false, message: 'Service request not found' });
+    }
+    
+    console.log('✅ Deleted successfully:', deleted.unitName);
+    
+    res.json({ 
+      success: true, 
+      message: 'Service request deleted successfully',
+      data: deleted
+    });
+  } catch (error) {
+    console.error('❌ Error deleting service request:', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+// Mark service request as ready for release (Dispatch)
+app.put('/markReadyForRelease/:id', async (req, res) => {
+  try {
+    console.log(`🚀 PUT /markReadyForRelease/${req.params.id}`);
+    const { markedBy } = req.body;
+    
+    const request = await Servicerequest.findById(req.params.id);
+    if (!request) {
+      return res.status(404).json({ success: false, message: 'Service request not found' });
+    }
+    
+    console.log('Current state:', {
+      unitName: request.unitName,
+      status: request.status,
+      completedServices: request.completedServices,
+      totalServices: request.service.length
+    });
+    
+    // Verify all services are completed
+    const allCompleted = request.service.length > 0 && 
+                        request.completedServices.length === request.service.length;
+    
+    if (!allCompleted) {
+      console.log('❌ Not all services completed:', {
+        completed: request.completedServices.length,
+        total: request.service.length
+      });
+      return res.status(400).json({ 
+        success: false, 
+        message: `Cannot mark as ready - only ${request.completedServices.length}/${request.service.length} services completed` 
+      });
+    }
+    
+    request.readyForRelease = true;
+    request.status = 'Ready for Release';
+    await request.save();
+    
+    console.log('✅ Marked as ready for release:', request.unitName);
+    res.json({ success: true, data: request });
+  } catch (error) {
+    console.error('❌ Error marking ready for release:', error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// Release to customer (Admin)
+app.put('/releaseToCustomer/:id', async (req, res) => {
+  try {
+    console.log(`🎉 PUT /releaseToCustomer/${req.params.id}`);
+    const { releasedBy } = req.body;
+    
+    const request = await Servicerequest.findById(req.params.id);
+    if (!request) {
+      return res.status(404).json({ success: false, message: 'Service request not found' });
+    }
+    
+    if (!request.readyForRelease) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Vehicle is not marked as ready for release' 
+      });
+    }
+    
+    request.releasedToCustomer = true;
+    request.status = 'Released to Customer';
+    request.releasedBy = releasedBy;
+    request.releasedAt = new Date();
+    await request.save();
+    
+    console.log('✅ Released to customer:', request.unitName);
+    res.json({ success: true, data: request });
+  } catch (error) {
+    console.error('❌ Error releasing to customer:', error);
     res.status(500).json({ success: false, message: error.message });
   }
 });
