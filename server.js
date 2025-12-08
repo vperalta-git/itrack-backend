@@ -1482,7 +1482,19 @@ const unitAllocationSchema = new mongoose.Schema({
 
 const UnitAllocation = mongoose.model('UnitAllocation', unitAllocationSchema);
 
-// Get all unit allocations
+// Get all unit allocations (singular endpoint for mobile app compatibility)
+app.get('/api/getUnitAllocation', async (req, res) => {
+  try {
+    const allocations = await UnitAllocation.find({}).sort({ createdAt: -1 });
+    console.log(`📊 Found ${allocations.length} unit allocations`);
+    res.json(allocations);
+  } catch (error) {
+    console.error('❌ Get unit allocations error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Get all unit allocations (plural endpoint for web app compatibility)
 app.get('/api/getUnitAllocations', async (req, res) => {
   try {
     const allocations = await UnitAllocation.find({}).sort({ createdAt: -1 });
