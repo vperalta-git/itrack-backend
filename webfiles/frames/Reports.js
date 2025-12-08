@@ -22,6 +22,12 @@ const Reports = () => {
   const [unitSummary, setUnitSummary] = useState([]);
   const [currentUser, setCurrentUser] = useState(null);
   const [fullUser, setFullUser] = useState(null);
+  const [profileImage, setProfileImage] = useState('');
+const [profileData, setProfileData] = useState({ name: '', phoneno: '', picture: '' });
+const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
+
+const fileInputRef = useRef(null);
 
   useEffect(() => {
     fetchCompletedRequests();
@@ -271,19 +277,296 @@ autoTable(doc, {
     });
   }, []);
 
+
+
+  const handleProfileClick = () => {
+  fileInputRef.current.click();
+};
+
+const handleProfileChange = (e) => {
+  const file = e.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const newImage = reader.result;
+      setProfileData(prev => ({ ...prev, picture: newImage }));
+      setProfileImage(newImage);
+
+      if (fullUser && fullUser.email) {
+        localStorage.setItem(`profileImage_${fullUser.email}`, newImage);
+      }
+
+      // Audit log
+      try {
+        await axios.post(
+          "https://itrack-web-backend.onrender.com/api/audit-trail",
+          {
+            action: "Update",
+            resource: "Profile Image",
+            performedBy: fullUser.email || fullUser.name,
+            details: "Profile picture changed",
+            timestamp: new Date().toISOString(),
+          },
+          { withCredentials: true }
+        );
+      } catch (err) {
+        console.log("Audit log error:", err);
+      }
+    };
+    reader.readAsDataURL(file);
+  }
+};
+
+
+const handleUpdateProfile = () => {
+  if (!profileData.name || !profileData.phoneno) {
+    alert("Name and phone number are required.");
+    return;
+  }
+
+  const updatedData = {
+    name: profileData.name,
+    phoneno: profileData.phoneno,
+    picture: profileData.picture,
+  };
+
+  axios.put(`https://itrack-web-backend.onrender.com/api/updateUser/${fullUser._id}`, updatedData)
+    .then(() => {
+      alert("Profile updated successfully!");
+      setFullUser({ ...fullUser, ...updatedData });
+      if (fullUser && fullUser.email) {
+        localStorage.setItem(`profileImage_${fullUser.email}`, profileData.picture || "");
+      }
+      setIsProfileModalOpen(false);
+    })
+    .catch((error) => {
+      console.error("Update failed:", error);
+      alert("Failed to update profile.");
+    });
+};
+
+
+
+useEffect(() => {
+  if (fullUser && fullUser.email) {
+    const savedImage = localStorage.getItem(`profileImage_${fullUser.email}`);
+    if (savedImage) {
+      setProfileImage(savedImage);
+      setProfileData(prev => ({ ...prev, picture: savedImage }));
+    }
+  }
+}, [fullUser]);
+
+
+
+useEffect(() => {
+  const handleClickOutside = (e) => {
+    if (!e.target.closest(".profile-wrapper")) {
+      setIsDropdownOpen(false);
+    }
+  };
+  document.addEventListener("click", handleClickOutside);
+  return () => document.removeEventListener("click", handleClickOutside);
+}, []);
+
+
+
+
+
+
   return (
     <div className="app">
       <Sidebar sidebarOpen={sidebarOpen} setSidebarOpen={setSidebarOpen} />
       <div className="main">
-        <header className="header">
-          <button className="toggle-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
-          <h3 className="header-title1">Reports</h3>
-          {fullUser && fullUser.name && (
-            <div className="loggedinuser" style={{ marginLeft: 'auto', fontWeight: 500, fontSize: 15 }}>
-              Welcome, {fullUser.name}
-            </div>
-          )}
-        </header>
+        <header className="header" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+  <div style={{ display: 'flex', alignItems: 'center' }}>
+    <button className="toggle-btn" onClick={() => setSidebarOpen(!sidebarOpen)}>☰</button>
+    <h3 className="header-title1" style={{ marginLeft: 10 }}>Reports</h3>
+  </div>
+
+  {/* Profile section on the right */}
+  <div style={{ display: 'flex', alignItems: 'center', position: 'relative' }}>
+    {fullUser && fullUser.name && (
+      <div
+        className="loggedinuser"
+        onClick={() => {
+          setProfileData({
+            name: fullUser.name,
+            phoneno: fullUser.phoneno,
+            picture: fullUser.picture || ''
+          });
+          setIsProfileModalOpen(true);
+        }}
+        style={{
+          fontWeight: 500,
+          fontSize: 15,
+          cursor: 'pointer',
+        }}
+      >
+        Welcome, {fullUser.name}
+      </div>
+    )}
+
+    <div
+      className="profile-wrapper"
+      style={{ cursor: 'pointer' }}
+    >
+      <img
+        src={fullUser?.picture || profileImage || "https://cdn-icons-png.flaticon.com/512/847/847969.png"}
+        alt=""
+        onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+        style={{
+          width: "40px",
+          height: "40px",
+          borderRadius: "50%",
+          border: "2px solid #ffffff",
+          objectFit: "cover",
+        }}
+      />
+
+      <input
+        type="file"
+        accept="image/*"
+        ref={fileInputRef}
+        onChange={handleProfileChange}
+        style={{ display: "none" }}
+      />
+
+      {isDropdownOpen && (
+        <div
+          className="profile-dropdown"
+          style={{
+            position: "absolute",
+            top: "50px",
+            right: 0,
+            backgroundColor: "#fff",
+            border: "1px solid #ddd",
+            borderRadius: "8px",
+            boxShadow: "0 2px 8px rgba(0, 0, 0, 0.15)",
+            zIndex: 1000,
+            width: "150px",
+          }}
+        >
+          <div
+            onClick={() => {
+              setIsDropdownOpen(false);
+              setProfileData({
+                name: fullUser.name,
+                phoneno: fullUser.phoneno,
+                picture: fullUser.picture || "",
+              });
+              setIsProfileModalOpen(true);
+            }}
+            style={{
+              padding: "10px 12px",
+              cursor: "pointer",
+              color: "#393939ff",
+              fontSize: "13px",
+              borderBottom: "1px solid #eee",
+            }}
+          >
+            Edit Profile
+          </div>
+        </div>
+      )}
+    </div>
+  </div>
+</header>
+
+
+
+        {isProfileModalOpen && (
+  <div className="profile-modal-overlay">
+    <div className="profile-modal-container">
+      <h2 className="profile-modal-title">Edit Profile</h2>
+
+      <div className="profile-modal-content">
+        {/* Profile Image Section */}
+        <div className="profile-modal-image-section">
+          <img
+            src={
+              fullUser?.picture ||
+              profileImage ||
+              "https://via.placeholder.com/120"
+            }
+            alt="Profile"
+            className="profile-modal-image"
+            onClick={() =>
+              document.getElementById("profilePicInput").click()
+            }
+          />
+          <input
+            type="file"
+            id="profilePicInput"
+            style={{ display: "none" }}
+            accept="image/*"
+            onChange={(e) => {
+              const file = e.target.files[0];
+              if (file) {
+                const reader = new FileReader();
+                reader.onloadend = () => {
+                  setProfileData({ ...profileData, picture: reader.result });
+                };
+                reader.readAsDataURL(file);
+              }
+            }}
+          />
+          <small className="profile-modal-image-note">
+            Click image to change
+          </small>
+        </div>
+
+        {/* Form Section */}
+        <div className="profile-modal-form">
+          <div className="profile-modal-field">
+            <label className="profile-modal-label">Name</label>
+            <input
+              type="text"
+              className="profile-modal-input"
+              value={profileData.name}
+              onChange={(e) =>
+                setProfileData({ ...profileData, name: e.target.value })
+              }
+            />
+          </div>
+
+          <div className="profile-modal-field">
+            <label className="profile-modal-label">Phone Number</label>
+            <input
+              type="text"
+              className="profile-modal-input"
+              value={profileData.phoneno}
+              onChange={(e) =>
+                setProfileData({ ...profileData, phoneno: e.target.value })
+              }
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="profile-modal-actions">
+        <button
+          className="profile-modal-btn profile-modal-btn-save"
+          onClick={handleUpdateProfile}
+        >
+          Save Changes
+        </button>
+        <button
+          className="profile-modal-btn profile-modal-btn-cancel"
+          onClick={() => setIsProfileModalOpen(false)}
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  </div>
+)}
+
+
+
+
+
 
         <div className="content">
 
@@ -318,7 +601,7 @@ autoTable(doc, {
     <img src={filterIcon} alt="Filter" className="button-icon1" />
   </button>
 
-  <button className="pdf-btn" onClick={handleDownloadPDF}>Download<img src={downloadIcon} alt="Download" className="button-icon" />
+  <button className="pdf-btn" onClick={handleDownloadPDF}>Print PDF<img src={downloadIcon} alt="Download" className="button-icon" />
     
   </button>
 </div>

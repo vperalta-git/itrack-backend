@@ -87,6 +87,27 @@ const DriverAllocation = () => {
     return;
   }
 
+  // Check if driver already has a pending or in transit vehicle
+  const driverActiveAllocations = allocation.filter(alloc => {
+    const allocationDriver = alloc.assignedDriver || '';
+    const status = (alloc.status || '').toLowerCase();
+    
+    // Match by driver name
+    const isMatchingDriver = allocationDriver === assignedDriver;
+    
+    // Check if status is pending or in transit
+    const hasActiveAllocation = status === 'pending' || status === 'in transit';
+    
+    return isMatchingDriver && hasActiveAllocation;
+  });
+
+  if (driverActiveAllocations.length > 0) {
+    const alloc = driverActiveAllocations[0];
+    const statusText = alloc.status?.toLowerCase() === 'pending' ? 'Pending' : 'In Transit';
+    alert(`${assignedDriver} already has a vehicle (${alloc.unitName} ${alloc.unitId}) with status "${statusText}". The driver must complete the current delivery and press "Ready for Next Delivery" before being assigned another vehicle.`);
+    return;
+  }
+
   axios.post("https://itrack-web-backend.onrender.com/api/createAllocation", newAllocation, { withCredentials: true })
     .then(() => {
       fetchAllocations();
@@ -117,6 +138,36 @@ const DriverAllocation = () => {
   if (!unitName || !unitId || !bodyColor || !variation || !assignedDriver) {
     alert("All fields are required.");
     return;
+  }
+
+  // Get the original allocation to check if driver is being changed
+  const originalAllocation = allocation.find(a => a._id === id);
+  
+  // If driver is being changed, validate the new driver
+  if (originalAllocation && assignedDriver !== originalAllocation.assignedDriver) {
+    // Check if the new driver already has a pending or in transit vehicle
+    const driverActiveAllocations = allocation.filter(alloc => {
+      // Skip the current allocation being edited
+      if (alloc._id === id) return false;
+      
+      const allocationDriver = alloc.assignedDriver || '';
+      const status = (alloc.status || '').toLowerCase();
+      
+      // Match by driver name
+      const isMatchingDriver = allocationDriver === assignedDriver;
+      
+      // Check if status is pending or in transit
+      const hasActiveAllocation = status === 'pending' || status === 'in transit';
+      
+      return isMatchingDriver && hasActiveAllocation;
+    });
+
+    if (driverActiveAllocations.length > 0) {
+      const alloc = driverActiveAllocations[0];
+      const statusText = alloc.status?.toLowerCase() === 'pending' ? 'Pending' : 'In Transit';
+      alert(`${assignedDriver} already has a vehicle (${alloc.unitName} ${alloc.unitId}) with status "${statusText}". The driver must complete the current delivery and press "Ready for Next Delivery" before being assigned another vehicle.`);
+      return;
+    }
   }
 
   axios.put(`https://itrack-web-backend.onrender.com/api/updateAllocation/${id}`, editAllocation, { withCredentials: true })
