@@ -1601,6 +1601,45 @@ app.delete('/api/deleteUnitAllocation/:id', async (req, res) => {
   }
 });
 
+// Update unit allocation
+app.put('/api/updateUnitAllocation/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const updateData = req.body;
+    
+    console.log(`📋 Updating unit allocation ${id}:`, updateData);
+    
+    const updatedAllocation = await UnitAllocation.findByIdAndUpdate(
+      id,
+      updateData,
+      { new: true, runValidators: true }
+    );
+    
+    if (!updatedAllocation) {
+      return res.status(404).json({ success: false, message: 'Unit allocation not found' });
+    }
+    
+    // Update inventory assignedTo if agent changed
+    if (updateData.assignedTo && updateData.unitId) {
+      await Inventory.findOneAndUpdate(
+        { unitId: updateData.unitId },
+        { 
+          assignedTo: updateData.assignedTo,
+          lastUpdatedBy: updateData.updatedBy || 'System',
+          dateUpdated: new Date()
+        }
+      );
+      console.log(`✅ Updated vehicle ${updateData.unitId} assignedTo "${updateData.assignedTo}"`);
+    }
+    
+    console.log('✅ Updated unit allocation:', updatedAllocation.unitName);
+    res.json({ success: true, message: 'Unit allocation updated successfully', data: updatedAllocation });
+  } catch (error) {
+    console.error('❌ Update unit allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ========== DISPATCH ASSIGNMENT ENDPOINTS ==========
 
 // Get dispatch assignments
