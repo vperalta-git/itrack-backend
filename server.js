@@ -1473,7 +1473,9 @@ app.post('/completeAllocation', async (req, res) => {
 const unitAllocationSchema = new mongoose.Schema({
   unitId: { type: String, required: true },
   unitName: { type: String, required: true },
-  assignedAgent: { type: String, required: true },
+  bodyColor: String,
+  variation: String,
+  assignedTo: { type: String, required: true }, // Changed from assignedAgent to assignedTo
   allocatedBy: String,
   status: { type: String, default: 'Active' },
   createdAt: { type: Date, default: Date.now },
@@ -1529,12 +1531,12 @@ app.post('/api/createUnitAllocation', async (req, res) => {
       await Inventory.findOneAndUpdate(
         { unitId: allocationData.unitId },
         { 
-          assignedAgent: allocationData.assignedAgent,
+          assignedTo: allocationData.assignedTo, // Changed from assignedAgent
           lastUpdatedBy: allocationData.allocatedBy || 'System',
           dateUpdated: new Date()
         }
       );
-      console.log(`✅ Updated vehicle ${allocationData.unitId} assignedAgent to "${allocationData.assignedAgent}"`);
+      console.log(`✅ Updated vehicle ${allocationData.unitId} assignedTo "${allocationData.assignedTo}"`);
     }
     
     console.log('✅ Created unit allocation:', newAllocation.unitName);
@@ -1563,7 +1565,7 @@ app.delete('/api/deleteUnitAllocation/:id', async (req, res) => {
       await Inventory.findOneAndUpdate(
         { unitId: deletedAllocation.unitId },
         { 
-          assignedAgent: null,
+          assignedTo: null, // Changed from assignedAgent
           lastUpdatedBy: 'System - Allocation Deleted',
           dateUpdated: new Date()
         }
