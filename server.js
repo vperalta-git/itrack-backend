@@ -4356,6 +4356,115 @@ app.put('/updateTestDrive/:id', async (req, res) => {
   }
 });
 
+// ============================================
+// WEB-COMPATIBLE TEST DRIVE ENDPOINTS
+// ============================================
+
+// Test Drive Inventory Schema (matching web app with unitName2, etc.)
+const TestInvSchema = new mongoose.Schema({
+  unitName2: { type: String, required: true },
+  unitId2: { type: String, required: true },
+  bodyColor2: { type: String, required: true },
+  variation2: { type: String, required: true },
+  quantity2: { type: Number, default: 1 }
+}, { timestamps: true });
+
+const TestInv = mongoose.model('TestInv', TestInvSchema, 'testinvs');
+
+// GET - Fetch all test drive inventory
+app.get('/api/getTestDriveInv', async (req, res) => {
+  try {
+    const inventory = await TestInv.find({}).sort({ createdAt: -1 });
+    res.json(inventory);
+  } catch (error) {
+    console.error('Error fetching test drive inventory:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST - Create new test drive inventory item
+app.post('/api/createTestDriveInv', async (req, res) => {
+  try {
+    const newItem = new TestInv(req.body);
+    await newItem.save();
+    res.json(newItem);
+  } catch (error) {
+    console.error('Error creating test drive inventory:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT - Update test drive inventory item
+app.put('/api/updateTestDriveInv/:id', async (req, res) => {
+  try {
+    const updated = await TestInv.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    res.json(updated);
+  } catch (error) {
+    console.error('Error updating test drive inventory:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE - Delete test drive inventory item
+app.delete('/api/deleteTestDriveInv/:id', async (req, res) => {
+  try {
+    await TestInv.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting test drive inventory:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Test Drive Booking Schema (matching web app)
+const TestDriveBookingSchema = new mongoose.Schema({
+  vehicleId: { type: String, required: true },
+  date: { type: String, required: true },
+  time: { type: String, required: true },
+  name: { type: String, required: true },
+  contact: { type: String, required: true }
+}, { timestamps: true });
+
+const TestDriveBooking = mongoose.model('TestDriveBooking', TestDriveBookingSchema, 'testdrivebookings');
+
+// GET - Fetch all test drive bookings
+app.get('/api/getAllTestDrives', async (req, res) => {
+  try {
+    const bookings = await TestDriveBooking.find({}).sort({ createdAt: -1 });
+    res.json(bookings);
+  } catch (error) {
+    console.error('Error fetching test drive bookings:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// POST - Create new test drive booking
+app.post('/api/createTestDrive', async (req, res) => {
+  try {
+    const newBooking = new TestDriveBooking(req.body);
+    await newBooking.save();
+    res.json(newBooking);
+  } catch (error) {
+    console.error('Error creating test drive booking:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE - Delete test drive booking
+app.delete('/api/deleteTestDrive/:id', async (req, res) => {
+  try {
+    await TestDriveBooking.findByIdAndDelete(req.params.id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting test drive booking:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// END WEB-COMPATIBLE TEST DRIVE ENDPOINTS
+// ============================================
+
 // Enhanced User Management Endpoints
 app.put('/updateUser/:id', async (req, res) => {
   try {
