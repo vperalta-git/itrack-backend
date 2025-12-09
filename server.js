@@ -52,7 +52,7 @@ app.use(session({
   }
 }));
 
-// CORS configuration - Updated for production security
+// CORS configuration - Updated for mobile app and production security
 const allowedOrigins = process.env.NODE_ENV === 'production' 
   ? [
       'https://itrack-backend-1.onrender.com',
@@ -63,7 +63,29 @@ const allowedOrigins = process.env.NODE_ENV === 'production'
 
 app.use(cors({
   credentials: true,
-  origin: allowedOrigins
+  origin: function (origin, callback) {
+    // Allow requests with no origin (like mobile apps, Postman, etc.)
+    if (!origin) return callback(null, true);
+    
+    if (allowedOrigins === true) {
+      return callback(null, true);
+    }
+    
+    if (Array.isArray(allowedOrigins)) {
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') return allowed === origin;
+        if (allowed instanceof RegExp) return allowed.test(origin);
+        return false;
+      });
+      
+      if (isAllowed) {
+        return callback(null, true);
+      }
+    }
+    
+    // Default: allow the origin
+    callback(null, true);
+  }
 }));
 app.use(express.json({ limit: '50mb' })); // Support larger payloads for profile pictures
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
