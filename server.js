@@ -1007,13 +1007,11 @@ app.post('/createUser', async (req, res) => {
       return res.status(400).json({ success: false, message: 'Username already exists' });
     }
     
-    // Hash password
-    const saltRounds = 10;
-    const hashedPassword = await bcrypt.hash(password, saltRounds);
-    
+    // Store password as plain text (temporary for development)
+    // TODO: Re-enable password hashing for production
     const newUser = new User({
       username: username.toLowerCase(),
-      password: hashedPassword,
+      password: password, // Plain text password for now
       role: role || 'salesAgent',
       accountName,
       email
