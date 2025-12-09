@@ -1,7 +1,7 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const cors = require('cors');
-// Force deployment refresh - latest version with itrackDB connection
+// Force deployment refresh - v2.0 with mobile API auth bypass
 const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
