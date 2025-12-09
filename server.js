@@ -4058,6 +4058,122 @@ app.delete('/deleteServiceRequest/:id', async (req, res) => {
   }
 });
 
+// ========== MOBILE APP COMPATIBILITY ENDPOINTS ==========
+// These are aliases for the mobile app that calls /createRequest instead of /createServiceRequest
+
+// POST /createRequest - Alias for mobile app compatibility
+app.post('/createRequest', async (req, res) => {
+  try {
+    console.log('📱 POST /createRequest (mobile app) - Redirecting to createServiceRequest logic');
+    
+    // Create new service request
+    const newRequest = new Servicerequest(req.body);
+    const savedRequest = await newRequest.save();
+    
+    console.log('✅ Service request created via mobile app');
+    console.log('📄 Document ID:', savedRequest._id.toString());
+    
+    // Update vehicle status to "In Dispatch"
+    if (savedRequest.unitId) {
+      await Inventory.findOneAndUpdate(
+        { unitId: savedRequest.unitId },
+        { 
+          status: 'In Dispatch',
+          lastUpdatedBy: savedRequest.preparedBy || 'System - Service Request',
+          dateUpdated: new Date()
+        }
+      );
+      console.log(`✅ Updated vehicle ${savedRequest.unitId} status to "In Dispatch"`);
+    }
+    
+    res.json({ 
+      success: true, 
+      message: 'Service request created successfully',
+      data: savedRequest 
+    });
+  } catch (error) {
+    console.error('❌ Error creating service request (mobile):', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+// PUT /updateRequest/:id - Alias for mobile app compatibility
+app.put('/updateRequest/:id', async (req, res) => {
+  try {
+    console.log(`📱 PUT /updateRequest/${req.params.id} (mobile app)`);
+    
+    const updatedRequest = await Servicerequest.findByIdAndUpdate(
+      req.params.id,
+      req.body,
+      { new: true, runValidators: true }
+    );
+    
+    if (!updatedRequest) {
+      return res.status(404).json({ success: false, message: 'Service request not found' });
+    }
+    
+    console.log('✅ Service request updated via mobile app');
+    
+    res.json({ 
+      success: true, 
+      message: 'Service request updated successfully',
+      data: updatedRequest 
+    });
+  } catch (error) {
+    console.error('❌ Error updating service request (mobile):', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
+// DELETE /deleteRequest/:id - Alias for mobile app compatibility
+app.delete('/deleteRequest/:id', async (req, res) => {
+  try {
+    console.log(`📱 DELETE /deleteRequest/${req.params.id} (mobile app)`);
+    
+    // Find and delete the request
+    const requestToDelete = await Servicerequest.findById(req.params.id);
+    
+    if (!requestToDelete) {
+      return res.status(404).json({ success: false, message: 'Service request not found' });
+    }
+    
+    const deleted = await Servicerequest.findByIdAndDelete(req.params.id);
+    
+    // Automatically return vehicle status to "Available"
+    if (deleted.unitId) {
+      await Inventory.findOneAndUpdate(
+        { unitId: deleted.unitId },
+        { 
+          status: 'Available',
+          lastUpdatedBy: 'System - Service Request Deleted',
+          dateUpdated: new Date()
+        }
+      );
+      console.log(`✅ Returned vehicle ${deleted.unitId} status to "Available"`);
+    }
+    
+    console.log('✅ Service request deleted via mobile app');
+    
+    res.json({ 
+      success: true, 
+      message: 'Service request deleted successfully',
+      data: deleted 
+    });
+  } catch (error) {
+    console.error('❌ Error deleting service request (mobile):', error);
+    res.status(500).json({ 
+      success: false, 
+      message: error.message 
+    });
+  }
+});
+
 // Mark service request as ready for release (Dispatch)
 app.put('/markReadyForRelease/:id', async (req, res) => {
   try {
