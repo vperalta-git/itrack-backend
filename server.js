@@ -1204,7 +1204,19 @@ const InventorySchema = new mongoose.Schema({
   addedBy: String,
   lastUpdatedBy: String,
   addedDate: Date,
-  dateUpdated: Date
+  dateUpdated: Date,
+  // Agent assignment info (from web version)
+  assignedAgent: { type: String, default: null },
+  // Driver allocation info (from web version)
+  assignedDriver: { type: String, default: null },
+  driverAccepted: { type: Boolean, default: false },
+  // GPS Location for Maps (from web version)
+  location: {
+    latitude: { type: Number, default: null },
+    longitude: { type: Number, default: null },
+    address: { type: String, default: 'Isuzu Dealership' },
+    lastUpdated: { type: Date, default: Date.now }
+  }
 }, { timestamps: true });
 const Inventory = mongoose.model('Inventory', InventorySchema, 'inventories');
 
@@ -1474,6 +1486,46 @@ app.post('/completeAllocation', async (req, res) => {
     allocation.routeInfo.actualDuration = actualDuration;
     
     await allocation.save();
+    
+    // Send notifications to admin and assigned agent
+    try {
+      // Notify admin
+      await Notification.create({
+        type: 'vehicle_delivered',
+        title: 'Vehicle Delivered',
+        message: `${allocation.unitName} (${allocation.unitId}) has been delivered by ${allocation.assignedDriver}`,
+        vehicleId: allocation.unitId,
+        targetRole: 'admin',
+        priority: 'high',
+        metadata: {
+          driver: allocation.assignedDriver,
+          deliveryTime: now,
+          duration: actualDuration
+        }
+      });
+
+      // Notify assigned agent
+      if (allocation.assignedAgent) {
+        await Notification.create({
+          type: 'vehicle_delivered',
+          title: 'Your Vehicle Has Been Delivered',
+          message: `${allocation.unitName} (${allocation.unitId}) has been successfully delivered to the destination`,
+          vehicleId: allocation.unitId,
+          assignedAgent: allocation.assignedAgent,
+          targetRole: 'agent',
+          priority: 'high',
+          metadata: {
+            driver: allocation.assignedDriver,
+            deliveryTime: now,
+            duration: actualDuration
+          }
+        });
+      }
+
+      console.log('📢 Delivery notifications sent');
+    } catch (notifError) {
+      console.error('⚠️ Failed to send delivery notifications:', notifError);
+    }
     
     console.log(`✅ Completed allocation ${allocation.unitName} - Actual duration: ${actualDuration}s`);
     res.json({ 
@@ -3458,6 +3510,198 @@ app.get('/api/audit-trail', async (req, res) => {
   }
 });
 
+// Get complete vehicle history timeline
+app.get('/api/vehicle-history/:unitId', async (req, res) => {
+  try {
+    const { unitId } = req.params;
+    console.log(`📜 Fetching complete history for vehicle: ${unitId}`);
+    
+    const timeline = [];
+    
+    // 1. Get vehicle allocation data
+    const allocation = await DriverAllocation.findOne({ unitId });
+    
+    if (!allocation) {
+      return res.status(404).json({
+        success: false,
+        error: 'Vehicle not found',
+        details: `No allocation found for unitId: ${unitId}`
+      });
+    }
+    
+    // Add vehicle creation/allocation event
+    timeline.push({
+      eventType: 'vehicle_added',
+      timestamp: allocation.createdAt,
+      title: 'Vehicle Added to System',
+      description: `${allocation.unitName} (${allocation.unitId}) added to inventory`,
+      data: {
+        unitName: allocation.unitName,
+        unitId: allocation.unitId,
+        bodyColor: allocation.bodyColor,
+        variation: allocation.variation
+      }
+    });
+    
+    // 2. Get service request data
+    try {
+      const serviceRequest = await ServiceRequest.findOne({ unitId });
+      
+      if (serviceRequest) {
+        // Service request created
+        timeline.push({
+          eventType: 'service_requested',
+          timestamp: serviceRequest.createdAt,
+          title: 'Service Request Created',
+          description: `${serviceRequest.service?.length || 0} services requested`,
+          data: {
+            services: serviceRequest.service || [],
+            requestedBy: serviceRequest.requestedBy
+          }
+        });
+        
+        // Each completed service
+        if (serviceRequest.completedServices && serviceRequest.completedServices.length > 0) {
+          serviceRequest.completedServices.forEach((service, index) => {
+            // Estimate timestamp based on completion order
+            const serviceTimestamp = new Date(serviceRequest.updatedAt || serviceRequest.createdAt);
+            serviceTimestamp.setHours(serviceTimestamp.getHours() + index);
+            
+            timeline.push({
+              eventType: 'service_completed',
+              timestamp: serviceTimestamp,
+              title: 'Service Completed',
+              description: service,
+              data: {
+                serviceName: service,
+                completionOrder: index + 1
+              }
+            });
+          });
+        }
+        
+        // Ready for release
+        if (allocation.dispatchStatus === 'ready_for_release' || allocation.status === 'Ready for Release') {
+          timeline.push({
+            eventType: 'ready_for_release',
+            timestamp: allocation.updatedAt || allocation.createdAt,
+            title: 'Ready for Release',
+            description: 'All services completed, vehicle ready for customer delivery',
+            data: {
+              completedServices: serviceRequest.completedServices || []
+            }
+          });
+        }
+      }
+    } catch (serviceError) {
+      console.log('Note: ServiceRequest model not available or error fetching:', serviceError.message);
+    }
+    
+    // 3. Driver assignment
+    if (allocation.assignedDriver) {
+      const driverAssignedTime = allocation.driverAssignedAt || allocation.createdAt;
+      timeline.push({
+        eventType: 'driver_assigned',
+        timestamp: driverAssignedTime,
+        title: 'Driver Assigned',
+        description: `${allocation.assignedDriver} assigned for delivery`,
+        data: {
+          driverName: allocation.assignedDriver,
+          destination: allocation.deliveryDestination?.address || 'N/A'
+        }
+      });
+    }
+    
+    // 4. Vehicle delivery
+    if (allocation.routeInfo?.routeCompleted) {
+      const deliveryTime = new Date(allocation.routeInfo.routeCompleted);
+      const startTime = allocation.routeInfo.routeStarted ? new Date(allocation.routeInfo.routeStarted) : null;
+      const duration = startTime ? Math.round((deliveryTime - startTime) / (1000 * 60)) : null;
+      
+      timeline.push({
+        eventType: 'vehicle_delivered',
+        timestamp: deliveryTime,
+        title: 'Vehicle Delivered',
+        description: `Delivered by ${allocation.assignedDriver}${duration ? ` in ${duration} minutes` : ''}`,
+        data: {
+          driver: allocation.assignedDriver,
+          deliveryTime: deliveryTime,
+          duration: duration
+        }
+      });
+    }
+    
+    // 5. Agent assignment
+    if (allocation.assignedAgent) {
+      timeline.push({
+        eventType: 'agent_assigned',
+        timestamp: allocation.agentAssignedAt || allocation.createdAt,
+        title: 'Sales Agent Assigned',
+        description: `Assigned to ${allocation.assignedAgent}`,
+        data: {
+          agentName: allocation.assignedAgent
+        }
+      });
+    }
+    
+    // 6. Customer information
+    if (allocation.customerName) {
+      timeline.push({
+        eventType: 'customer_assigned',
+        timestamp: allocation.customerAssignedAt || allocation.updatedAt,
+        title: 'Customer Information Added',
+        description: `Vehicle assigned to customer: ${allocation.customerName}`,
+        data: {
+          customerName: allocation.customerName,
+          customerPhone: allocation.customerPhone,
+          customerEmail: allocation.customerEmail
+        }
+      });
+    }
+    
+    // 7. Release to customer
+    if (allocation.dispatchStatus === 'released_to_customer' || allocation.status === 'Released') {
+      timeline.push({
+        eventType: 'released_to_customer',
+        timestamp: allocation.releasedAt || allocation.updatedAt,
+        title: 'Released to Customer',
+        description: `Vehicle officially released to ${allocation.customerName || 'customer'}`,
+        data: {
+          releasedBy: allocation.releasedBy || 'Admin',
+          customerName: allocation.customerName
+        }
+      });
+    }
+    
+    // Sort timeline by timestamp
+    timeline.sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+    
+    console.log(`✅ Found ${timeline.length} timeline events for ${unitId}`);
+    
+    res.json({
+      success: true,
+      unitId,
+      vehicleInfo: {
+        unitName: allocation.unitName,
+        unitId: allocation.unitId,
+        bodyColor: allocation.bodyColor,
+        variation: allocation.variation,
+        currentStatus: allocation.dispatchStatus || allocation.status
+      },
+      timeline,
+      totalEvents: timeline.length
+    });
+    
+  } catch (error) {
+    console.error('❌ Error fetching vehicle history:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch vehicle history',
+      details: error.message
+    });
+  }
+});
+
 // API Configuration endpoint
 app.get('/api/config', (req, res) => {
   const baseUrl = `http://${req.get('host')}`;
@@ -4426,6 +4670,110 @@ const TestDriveBookingSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 const TestDriveBooking = mongoose.model('TestDriveBooking', TestDriveBookingSchema, 'testdrivebookings');
+
+// ==================== NOTIFICATIONS SCHEMA ====================
+const NotificationSchema = new mongoose.Schema({
+  type: { type: String, required: true }, // 'ready_for_release', 'delivery_completed', etc.
+  title: { type: String, required: true },
+  message: { type: String, required: true },
+  vehicleId: String,
+  targetRole: { type: String, default: 'admin' }, // 'admin', 'manager', 'agent', etc.
+  priority: { type: String, default: 'normal', enum: ['low', 'normal', 'high', 'urgent'] },
+  read: { type: Boolean, default: false },
+  readBy: [String], // Array of usernames who have read the notification
+  timestamp: { type: Date, default: Date.now },
+  metadata: mongoose.Schema.Types.Mixed // Additional data
+}, { timestamps: true });
+
+const Notification = mongoose.model('Notification', NotificationSchema, 'notifications');
+
+// ==================== NOTIFICATION ENDPOINTS ====================
+
+// POST - Create new notification
+app.post('/api/notifications', async (req, res) => {
+  try {
+    const notification = new Notification(req.body);
+    await notification.save();
+    console.log('📢 Notification created:', notification.title);
+    res.json({ success: true, notification });
+  } catch (error) {
+    console.error('Error creating notification:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET - Fetch notifications for specific role
+app.get('/api/notifications/:role', async (req, res) => {
+  try {
+    const { role } = req.params;
+    const { unreadOnly } = req.query;
+    
+    const query = { targetRole: role.toLowerCase() };
+    if (unreadOnly === 'true') {
+      query.read = false;
+    }
+    
+    const notifications = await Notification.find(query)
+      .sort({ timestamp: -1 })
+      .limit(50);
+    
+    res.json(notifications);
+  } catch (error) {
+    console.error('Error fetching notifications:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// PUT - Mark notification as read
+app.put('/api/notifications/:id/read', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { username } = req.body;
+    
+    const notification = await Notification.findByIdAndUpdate(
+      id,
+      { 
+        read: true,
+        $addToSet: { readBy: username } // Add username to readBy array if not already present
+      },
+      { new: true }
+    );
+    
+    res.json({ success: true, notification });
+  } catch (error) {
+    console.error('Error marking notification as read:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// DELETE - Delete notification
+app.delete('/api/notifications/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await Notification.findByIdAndDelete(id);
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting notification:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// GET - Get unread notification count
+app.get('/api/notifications/:role/count', async (req, res) => {
+  try {
+    const { role } = req.params;
+    const count = await Notification.countDocuments({ 
+      targetRole: role.toLowerCase(), 
+      read: false 
+    });
+    res.json({ count });
+  } catch (error) {
+    console.error('Error counting notifications:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ==================== TEST DRIVE ENDPOINTS ====================
 
 // GET - Fetch all test drive bookings
 app.get('/api/getAllTestDrives', async (req, res) => {
