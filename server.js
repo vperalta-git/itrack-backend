@@ -431,6 +431,9 @@ const DriverAllocationSchema = new mongoose.Schema({
   assignedDriver: String,
   assignedDriverEmail: String, // For reliable driver matching
   assignedAgent: String,
+  assignedAgentId: String,
+  managerId: String,
+  managerName: String,
   status: String,
   allocatedBy: String,
 
@@ -1357,11 +1360,35 @@ app.delete('/deleteStock/:id', async (req, res) => {
 
 // ========== DRIVER ALLOCATION ENDPOINTS ==========
 
-// Get all allocations
+// Get all allocations with role-based filtering support
 app.get('/getAllocation', async (req, res) => {
   try {
-    const allocations = await DriverAllocation.find({}).sort({ createdAt: -1 });
-    console.log(`📊 Found ${allocations.length} allocations`);
+    const { agentId, managerId, role, agentName, managerName } = req.query;
+
+    const escapeRegex = (value = '') => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const nameRegex = (value) => new RegExp(`^${escapeRegex(value)}$`, 'i');
+
+    const query = {};
+
+    if (agentId) {
+      query.$or = [
+        { assignedAgentId: agentId },
+        { agentId },
+      ];
+      if (agentName) {
+        query.$or.push({ assignedAgent: nameRegex(agentName) });
+      }
+    } else if (managerId) {
+      query.$or = [
+        { managerId },
+      ];
+      if (managerName) {
+        query.$or.push({ managerName: nameRegex(managerName) });
+      }
+    }
+
+    const allocations = await DriverAllocation.find(query).sort({ createdAt: -1 });
+    console.log(`📊 Found ${allocations.length} allocations (filter: ${agentId ? 'agentId' : managerId ? 'managerId' : 'all'})`);
     res.json({ success: true, data: allocations });
   } catch (error) {
     console.error('❌ Get allocations error:', error);
@@ -1373,6 +1400,7 @@ app.get('/getAllocation', async (req, res) => {
 app.post('/createAllocation', async (req, res) => {
   try {
     const allocationData = req.body;
+    allocationData.status = allocationData.status || 'Pending';
     console.log('📋 Creating allocation:', allocationData);
     
     const newAllocation = new DriverAllocation(allocationData);
