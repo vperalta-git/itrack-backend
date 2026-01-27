@@ -3002,25 +3002,52 @@ app.get('/getCompletedRequests', async (req, res) => {
 
 // ========== DASHBOARD STATISTICS ==========
 
-// Dashboard stats endpoint
+// Dashboard stats endpoint with date filtering
 app.get('/dashboard/stats', async (req, res) => {
   try {
-    const totalStocks = await Inventory.countDocuments();
-    const totalUsers = await User.countDocuments();
-    const totalAllocations = await DriverAllocation.countDocuments();
-    const completedRequests = await Servicerequest.countDocuments({ status: 'Completed' });
+    const { startDate, endDate } = req.query;
+    
+    // Build date filter if dates are provided
+    let dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter = {
+        createdAt: {
+          $gte: new Date(startDate),
+          $lte: new Date(endDate)
+        }
+      };
+      console.log(`📅 Filtering stats from ${startDate} to ${endDate}`);
+    }
+    
+    // Count with date filters where applicable
+    const totalStocks = await Inventory.countDocuments(dateFilter);
+    const totalUsers = await User.countDocuments(dateFilter);
+    const totalAllocations = await DriverAllocation.countDocuments(dateFilter);
+    const completedAllocations = await DriverAllocation.countDocuments({
+      ...dateFilter,
+      status: { $in: ['Completed', 'Ready for Release'] }
+    });
+    const completedRequests = await Servicerequest.countDocuments({
+      ...dateFilter,
+      status: 'Completed'
+    });
     const pendingRequests = await Servicerequest.countDocuments({ status: 'Pending' });
     const inTransitVehicles = await DriverAllocation.countDocuments({ status: 'In Transit' });
     const readyForRelease = await DriverAllocation.countDocuments({ readyForRelease: true });
+    
+    // Available stocks is current state, not date-filtered
+    const availableStocks = await Inventory.countDocuments({ status: 'Available' });
     
     const stats = {
       totalStocks,
       totalUsers,
       totalAllocations,
+      completedAllocations,
       finishedVehiclePreps: completedRequests,
       ongoingVehiclePreps: pendingRequests,
       ongoingShipments: inTransitVehicles,
       readyForRelease,
+      availableStocks,
       recentVehiclePreps: await Servicerequest.countDocuments({
         createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
       })
@@ -3464,6 +3491,73 @@ app.delete('/api/testdrive-vehicles/:id', async (req, res) => {
 });
 
 // ========== AUDIT TRAIL & HISTORY ==========
+
+// Get history with date filtering (for mobile Reports screen)
+app.get('/getHistory', async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+    console.log(`📊 Fetching history from ${startDate} to ${endDate}`);
+    
+    // Build date filter
+    const dateFilter = {};
+    if (startDate || endDate) {
+      dateFilter.createdAt = {};
+      if (startDate) dateFilter.createdAt.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        dateFilter.createdAt.$lte = end;
+      }
+    }
+    
+    const activities = [];
+    
+    // Recent allocations within date range
+    const recentAllocations = await DriverAllocation.find(dateFilter)
+      .sort({ createdAt: -1 })
+      .limit(50);
+    
+    recentAllocations.forEach(allocation => {
+      activities.push({
+        _id: allocation._id,
+        type: 'allocation',
+        action: 'Vehicle Allocated',
+        description: `${allocation.unitName} assigned to ${allocation.assignedDriver}`,
+        user: allocation.allocatedBy || 'System',
+        timestamp: allocation.createdAt,
+        details: `Unit: ${allocation.unitName}, Driver: ${allocation.assignedDriver}, Status: ${allocation.status}`
+      });
+    });
+    
+    // Sort by timestamp (newest first)
+    activities.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+    
+    console.log(`✅ Found ${activities.length} history entries`);
+    res.json({
+      success: true,
+      data: activities,
+      count: activities.length
+    });
+  } catch (error) {
+    console.error('❌ Error fetching history:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch history',
+      details: error.message
+    });
+  }
+});
+
+// Alias endpoints for compatibility
+app.get('/history', async (req, res) => {
+  req.url = '/getHistory' + (req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '');
+  return app._router.handle(req, res);
+});
+
+app.get('/audit/history', async (req, res) => {
+  req.url = '/getHistory' + (req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '');
+  return app._router.handle(req, res);
+});
 
 // Get system audit trail
 app.get('/api/audit-trail', async (req, res) => {
