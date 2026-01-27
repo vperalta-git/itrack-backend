@@ -3949,7 +3949,10 @@ app.post('/api/send-notification', async (req, res) => {
     }
 
     // Define notification templates based on the official Isuzu Pasig templates
+    // Valid from: 1/27/2026 to 1/27/2027
     const getNotificationTemplate = (status, processDetails = '') => {
+      const currentDate = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
+      
       switch (status.toLowerCase()) {
         case 'vehicle preparation':
         case 'in preparation':
@@ -3959,25 +3962,28 @@ app.post('/api/send-notification', async (req, res) => {
         case 'accessories':
         case 'ceramic coating':
           return {
-            subject: `Vehicle Preparation Update - ${vehicleModel}`,
+            subject: `Isuzu Pasig - Vehicle Preparation Update for ${vehicleModel}`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h2 style="color: #ff1e1e; text-align: center;">Isuzu Pasig - Vehicle Update</h2>
-                <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <p><strong>Dear ${customerName},</strong></p>
-                  <p>Hi ${customerName}, this is Isuzu Pasig. Your vehicle <strong>${vehicleModel}</strong> is now undergoing: <strong>${processDetails || status}</strong>.</p>
-                  <p>Thank you for choosing Isuzu Pasig.</p>
+                <div style="background-color: #ff1e1e; padding: 20px; text-align: center;">
+                  <h2 style="color: white; margin: 0;">Isuzu Pasig</h2>
                 </div>
-                <div style="margin-top: 30px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
-                  <p style="margin: 0;"><strong>Vehicle Details:</strong></p>
-                  <p style="margin: 5px 0;">Model: ${vehicleModel}</p>
-                  ${vin ? `<p style="margin: 5px 0;">VIN: ${vin}</p>` : ''}
-                  <p style="margin: 5px 0;">Status: ${status}</p>
+                <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #e0e0e0;">
+                  <p style="font-size: 16px; line-height: 1.6; color: #333;">
+                    Hi ${customerName}, this is Isuzu Pasig. Your vehicle <strong>${vin || vehicleModel}</strong> is now undergoing <strong>${processDetails || status}</strong>. Thank you for choosing Isuzu Pasig.
+                  </p>
                 </div>
-                <p style="text-align: center; margin-top: 30px; color: #666;">
-                  <em>Thank you for choosing Isuzu Pasig</em><br>
-                  I-Track Vehicle Management System
-                </p>
+                <div style="margin-top: 20px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
+                  <p style="margin: 0; font-size: 14px;"><strong>Vehicle Details:</strong></p>
+                  <p style="margin: 5px 0; font-size: 14px;">Model: ${vehicleModel}</p>
+                  ${vin ? `<p style="margin: 5px 0; font-size: 14px;">VIN/Unit ID: ${vin}</p>` : ''}
+                  <p style="margin: 5px 0; font-size: 14px;">Process: ${processDetails || status}</p>
+                  <p style="margin: 5px 0; font-size: 14px;">Date: ${currentDate}</p>
+                </div>
+                <div style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #e0e0e0;">
+                  <p style="color: #666; font-size: 12px; margin: 0;">I-Track Vehicle Management System</p>
+                  <p style="color: #666; font-size: 12px; margin: 5px 0 0 0;">Isuzu Pasig | Automotive</p>
+                </div>
               </div>
             `
           };
@@ -3985,25 +3991,31 @@ app.post('/api/send-notification', async (req, res) => {
         case 'dispatch & arrival':
         case 'in transit':
         case 'arriving':
+          const driverName = processDetails || '[Driver Name]';
           return {
-            subject: `Vehicle Dispatch Update - ${vehicleModel}`,
+            subject: `Isuzu Pasig - Vehicle Dispatch Alert for ${vehicleModel}`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h2 style="color: #ff1e1e; text-align: center;">Isuzu Pasig - Dispatch Alert</h2>
-                <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <p><strong>Dear ${customerName},</strong></p>
-                  <p>The vehicle <strong>${vehicleModel}</strong>, driven by [Driver] is arriving shortly at Isuzu Pasig.</p>
+                <div style="background-color: #ff1e1e; padding: 20px; text-align: center;">
+                  <h2 style="color: white; margin: 0;">Isuzu Pasig</h2>
                 </div>
-                <div style="margin-top: 30px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
-                  <p style="margin: 0;"><strong>Vehicle Details:</strong></p>
-                  <p style="margin: 5px 0;">Model: ${vehicleModel}</p>
-                  ${vin ? `<p style="margin: 5px 0;">VIN: ${vin}</p>` : ''}
-                  <p style="margin: 5px 0;">Status: ${status}</p>
+                <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #e0e0e0;">
+                  <p style="font-size: 16px; line-height: 1.6; color: #333;">
+                    The vehicle <strong>${vin || vehicleModel}</strong> driven by <strong>${driverName}</strong> is arriving shortly at Isuzu Pasig.
+                  </p>
                 </div>
-                <p style="text-align: center; margin-top: 30px; color: #666;">
-                  <em>Thank you for choosing Isuzu Pasig</em><br>
-                  I-Track Vehicle Management System
-                </p>
+                <div style="margin-top: 20px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
+                  <p style="margin: 0; font-size: 14px;"><strong>Vehicle Details:</strong></p>
+                  <p style="margin: 5px 0; font-size: 14px;">Model: ${vehicleModel}</p>
+                  ${vin ? `<p style="margin: 5px 0; font-size: 14px;">VIN/Unit ID: ${vin}</p>` : ''}
+                  <p style="margin: 5px 0; font-size: 14px;">Driver: ${driverName}</p>
+                  <p style="margin: 5px 0; font-size: 14px;">Status: In Transit</p>
+                  <p style="margin: 5px 0; font-size: 14px;">Date: ${currentDate}</p>
+                </div>
+                <div style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #e0e0e0;">
+                  <p style="color: #666; font-size: 12px; margin: 0;">I-Track Vehicle Management System</p>
+                  <p style="color: #666; font-size: 12px; margin: 5px 0 0 0;">Isuzu Pasig | Automotive</p>
+                </div>
               </div>
             `
           };
@@ -4013,50 +4025,56 @@ app.post('/api/send-notification', async (req, res) => {
         case 'completed':
         case 'ready':
           return {
-            subject: `Vehicle Ready for Release - ${vehicleModel}`,
+            subject: `Isuzu Pasig - Vehicle Ready for Release: ${vehicleModel}`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h2 style="color: #ff1e1e; text-align: center;">Isuzu Pasig - Vehicle Release</h2>
-                <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <p><strong>Dear ${customerName},</strong></p>
-                  <p>Good news! Your vehicle is now ready for release. Please proceed to Isuzu Pasig or contact your sales agent for pickup details.</p>
-                  <p>Thank you for choosing Isuzu Pasig.</p>
+                <div style="background-color: #ff1e1e; padding: 20px; text-align: center;">
+                  <h2 style="color: white; margin: 0;">Isuzu Pasig</h2>
                 </div>
-                <div style="margin-top: 30px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
-                  <p style="margin: 0;"><strong>Vehicle Details:</strong></p>
-                  <p style="margin: 5px 0;">Model: ${vehicleModel}</p>
-                  ${vin ? `<p style="margin: 5px 0;">VIN: ${vin}</p>` : ''}
-                  <p style="margin: 5px 0;">Status: Ready for Release</p>
+                <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #e0e0e0;">
+                  <p style="font-size: 16px; line-height: 1.6; color: #333;">
+                    Good news! Your vehicle is now ready for release. Please proceed to Isuzu Pasig or contact your sales agent for pickup details. Thank you for choosing Isuzu.
+                  </p>
                 </div>
-                <p style="text-align: center; margin-top: 30px; color: #666;">
-                  <em>Thank you for choosing Isuzu Pasig</em><br>
-                  I-Track Vehicle Management System
-                </p>
+                <div style="margin-top: 20px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
+                  <p style="margin: 0; font-size: 14px;"><strong>Vehicle Details:</strong></p>
+                  <p style="margin: 5px 0; font-size: 14px;">Model: ${vehicleModel}</p>
+                  ${vin ? `<p style="margin: 5px 0; font-size: 14px;">VIN/Unit ID: ${vin}</p>` : ''}
+                  <p style="margin: 5px 0; font-size: 14px;">Status: Ready for Release</p>
+                  <p style="margin: 5px 0; font-size: 14px;">Date: ${currentDate}</p>
+                </div>
+                <div style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #e0e0e0;">
+                  <p style="color: #666; font-size: 12px; margin: 0;">I-Track Vehicle Management System</p>
+                  <p style="color: #666; font-size: 12px; margin: 5px 0 0 0;">Isuzu Pasig | Automotive</p>
+                </div>
               </div>
             `
           };
           
         default:
           return {
-            subject: `Vehicle Status Update - ${vehicleModel}`,
+            subject: `Isuzu Pasig - Vehicle Status Update: ${vehicleModel}`,
             html: `
               <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <h2 style="color: #ff1e1e; text-align: center;">Isuzu Pasig - Status Update</h2>
-                <div style="background-color: #f9f9f9; padding: 20px; border-radius: 8px; margin: 20px 0;">
-                  <p><strong>Dear ${customerName},</strong></p>
-                  <p>Your vehicle <strong>${vehicleModel}</strong> status has been updated to: <strong>${status}</strong></p>
-                  <p>Thank you for choosing Isuzu Pasig.</p>
+                <div style="background-color: #ff1e1e; padding: 20px; text-align: center;">
+                  <h2 style="color: white; margin: 0;">Isuzu Pasig</h2>
                 </div>
-                <div style="margin-top: 30px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
-                  <p style="margin: 0;"><strong>Vehicle Details:</strong></p>
-                  <p style="margin: 5px 0;">Model: ${vehicleModel}</p>
-                  ${vin ? `<p style="margin: 5px 0;">VIN: ${vin}</p>` : ''}
-                  <p style="margin: 5px 0;">Status: ${status}</p>
+                <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #e0e0e0;">
+                  <p style="font-size: 16px; line-height: 1.6; color: #333;">
+                    Your vehicle <strong>${vehicleModel}</strong> status has been updated to: <strong>${status}</strong>
+                  </p>
                 </div>
-                <p style="text-align: center; margin-top: 30px; color: #666;">
-                  <em>Thank you for choosing Isuzu Pasig</em><br>
-                  I-Track Vehicle Management System
-                </p>
+                <div style="margin-top: 20px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
+                  <p style="margin: 0; font-size: 14px;"><strong>Vehicle Details:</strong></p>
+                  <p style="margin: 5px 0; font-size: 14px;">Model: ${vehicleModel}</p>
+                  ${vin ? `<p style="margin: 5px 0; font-size: 14px;">VIN/Unit ID: ${vin}</p>` : ''}
+                  <p style="margin: 5px 0; font-size: 14px;">Status: ${status}</p>
+                  <p style="margin: 5px 0; font-size: 14px;">Date: ${currentDate}</p>
+                </div>
+                <div style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #e0e0e0;">
+                  <p style="color: #666; font-size: 12px; margin: 0;">I-Track Vehicle Management System</p>
+                  <p style="color: #666; font-size: 12px; margin: 5px 0 0 0;">Isuzu Pasig | Automotive</p>
+                </div>
               </div>
             `
           };
@@ -4082,7 +4100,10 @@ app.post('/api/send-notification', async (req, res) => {
       success: true,
       message: 'Notification sent successfully',
       emailSent: true,
-      smsSent: false // Will be true when iTexMo integration is ready
+      smsSent: false, // SMS functionality replaced with email
+      notificationMethod: 'email',
+      recipient: customerEmail,
+      validityPeriod: '1/27/2026 - 1/27/2027'
     });
     
   } catch (error) {
