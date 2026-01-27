@@ -5255,3 +5255,123 @@ console.log('    - GET  /getRecentActivities');
 console.log('    - POST /generateReport');
 console.log('');
 console.log('🎯 Mobile app is now fully synced with web version!');
+
+// =========================
+// Test Drive Inventory API
+// =========================
+
+// Schema: testinvs collection used by mobile app
+const TestInvSchema = new mongoose.Schema({
+  unitName2: { type: String, required: true },
+  unitId2: { type: String, required: true },
+  bodyColor2: { type: String, required: true },
+  variation2: { type: String, required: true },
+  createdBy: { type: String, default: 'Mobile' }
+}, { timestamps: true });
+
+const TestInv = mongoose.models.TestInv || mongoose.model('TestInv', TestInvSchema, 'testinvs');
+
+// GET /api/getTestDriveInv - list all test drive inventory items
+app.get('/api/getTestDriveInv', async (req, res) => {
+  try {
+    const items = await TestInv.find({}).sort({ createdAt: -1 });
+    res.json(items);
+  } catch (error) {
+    console.error('❌ Get test drive inventory error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/createTestDriveInv - add new test drive unit
+app.post('/api/createTestDriveInv', async (req, res) => {
+  try {
+    const payload = {
+      unitName2: req.body.unitName2,
+      unitId2: req.body.unitId2,
+      bodyColor2: req.body.bodyColor2,
+      variation2: req.body.variation2,
+      createdBy: req.body.createdBy || 'Mobile'
+    };
+
+    const doc = new TestInv(payload);
+    await doc.save();
+    res.json({ success: true, data: doc });
+  } catch (error) {
+    console.error('❌ Create test drive inventory error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE /api/deleteTestDriveInv/:id - remove a test drive unit
+app.delete('/api/deleteTestDriveInv/:id', async (req, res) => {
+  try {
+    const deleted = await TestInv.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: 'Inventory item not found' });
+    }
+    res.json({ success: true, data: deleted });
+  } catch (error) {
+    console.error('❌ Delete test drive inventory error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// ======================
+// Test Drive Booking API
+// ======================
+
+// Schema: testdrivebookings collection used by mobile app
+const TestDriveBookingSchema = new mongoose.Schema({
+  vehicleId: { type: String, required: true },
+  date: { type: String, required: true },
+  time: { type: String, required: true },
+  name: { type: String, required: true },
+  contact: { type: String, required: true },
+  createdBy: { type: String, default: 'Mobile' }
+}, { timestamps: true });
+
+const TestDriveBooking = mongoose.models.TestDriveBooking || mongoose.model('TestDriveBooking', TestDriveBookingSchema, 'testdrivebookings');
+
+// GET /api/getAllTestDrives - list all bookings
+app.get('/api/getAllTestDrives', async (req, res) => {
+  try {
+    const items = await TestDriveBooking.find({}).sort({ createdAt: -1 });
+    res.json(items);
+  } catch (error) {
+    console.error('❌ Get test drives error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /api/createTestDrive - create a booking
+app.post('/api/createTestDrive', async (req, res) => {
+  try {
+    const booking = new TestDriveBooking({
+      vehicleId: req.body.vehicleId,
+      date: req.body.date,
+      time: req.body.time,
+      name: req.body.name,
+      contact: req.body.contact,
+      createdBy: req.body.createdBy || 'Mobile'
+    });
+    await booking.save();
+    res.json({ success: true, data: booking });
+  } catch (error) {
+    console.error('❌ Create test drive error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE /api/deleteTestDrive/:id - delete a booking
+app.delete('/api/deleteTestDrive/:id', async (req, res) => {
+  try {
+    const deleted = await TestDriveBooking.findByIdAndDelete(req.params.id);
+    if (!deleted) {
+      return res.status(404).json({ success: false, message: 'Test drive not found' });
+    }
+    res.json({ success: true, data: deleted });
+  } catch (error) {
+    console.error('❌ Delete test drive error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
