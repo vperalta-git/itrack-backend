@@ -1576,7 +1576,8 @@ const unitAllocationSchema = new mongoose.Schema({
   unitName: { type: String, required: true },
   bodyColor: String,
   variation: String,
-  assignedTo: { type: String, required: true }, // Changed from assignedAgent to assignedTo
+  assignedTo: { type: String, required: true }, // Canonical field for mobile
+  assignedAgent: String, // Alias for web/legacy clients
   allocatedBy: String,
   status: { type: String, default: 'Active' },
   createdAt: { type: Date, default: Date.now },
@@ -1590,7 +1591,16 @@ app.get('/api/getUnitAllocation', async (req, res) => {
   try {
     const allocations = await UnitAllocation.find({}).sort({ createdAt: -1 });
     console.log(`📊 Found ${allocations.length} unit allocations`);
-    res.json(allocations);
+    const normalized = allocations.map(a => {
+      const obj = a.toObject();
+      const assigned = obj.assignedTo || obj.assignedAgent || '';
+      return {
+        ...obj,
+        assignedTo: assigned,
+        assignedAgent: assigned
+      };
+    });
+    res.json(normalized);
   } catch (error) {
     console.error('❌ Get unit allocations error:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -1602,7 +1612,16 @@ app.get('/api/getUnitAllocations', async (req, res) => {
   try {
     const allocations = await UnitAllocation.find({}).sort({ createdAt: -1 });
     console.log(`📊 Found ${allocations.length} unit allocations`);
-    res.json(allocations);
+    const normalized = allocations.map(a => {
+      const obj = a.toObject();
+      const assigned = obj.assignedTo || obj.assignedAgent || '';
+      return {
+        ...obj,
+        assignedTo: assigned,
+        assignedAgent: assigned
+      };
+    });
+    res.json(normalized);
   } catch (error) {
     console.error('❌ Get unit allocations error:', error);
     res.status(500).json({ success: false, error: error.message });
@@ -1614,6 +1633,17 @@ app.post('/api/createUnitAllocation', async (req, res) => {
   try {
     const allocationData = req.body;
     console.log('📋 Creating unit allocation:', allocationData);
+    
+    const assigned = (allocationData.assignedTo || allocationData.assignedAgent || '').trim();
+    if (!assigned) {
+      return res.status(400).json({ 
+        success: false, 
+        message: 'Assigned agent is required' 
+      });
+    }
+
+    allocationData.assignedTo = assigned;
+    allocationData.assignedAgent = assigned;
     
     // Check if unit is already allocated
     const existingAllocation = await UnitAllocation.findOne({ unitId: allocationData.unitId });
@@ -1632,12 +1662,12 @@ app.post('/api/createUnitAllocation', async (req, res) => {
       await Inventory.findOneAndUpdate(
         { unitId: allocationData.unitId },
         { 
-          assignedTo: allocationData.assignedTo, // Changed from assignedAgent
+          assignedAgent: assigned,
           lastUpdatedBy: allocationData.allocatedBy || 'System',
           dateUpdated: new Date()
         }
       );
-      console.log(`✅ Updated vehicle ${allocationData.unitId} assignedTo "${allocationData.assignedTo}"`);
+      console.log(`✅ Updated vehicle ${allocationData.unitId} assignedAgent "${assigned}"`);
     }
     
     console.log('✅ Created unit allocation:', newAllocation.unitName);
@@ -1689,6 +1719,12 @@ app.put('/api/updateUnitAllocation/:id', async (req, res) => {
     const updateData = req.body;
     
     console.log(`📋 Updating unit allocation ${id}:`, updateData);
+
+    const assigned = (updateData.assignedTo || updateData.assignedAgent || '').trim();
+    if (assigned) {
+      updateData.assignedTo = assigned;
+      updateData.assignedAgent = assigned;
+    }
     
     const updatedAllocation = await UnitAllocation.findByIdAndUpdate(
       id,
@@ -1700,17 +1736,17 @@ app.put('/api/updateUnitAllocation/:id', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Unit allocation not found' });
     }
     
-    // Update inventory assignedTo if agent changed
-    if (updateData.assignedTo && updateData.unitId) {
+    // Update inventory assignedAgent if agent changed
+    if (assigned && updateData.unitId) {
       await Inventory.findOneAndUpdate(
         { unitId: updateData.unitId },
         { 
-          assignedTo: updateData.assignedTo,
+          assignedAgent: assigned,
           lastUpdatedBy: updateData.updatedBy || 'System',
           dateUpdated: new Date()
         }
       );
-      console.log(`✅ Updated vehicle ${updateData.unitId} assignedTo "${updateData.assignedTo}"`);
+      console.log(`✅ Updated vehicle ${updateData.unitId} assignedAgent "${assigned}"`);
     }
     
     console.log('✅ Updated unit allocation:', updatedAllocation.unitName);
