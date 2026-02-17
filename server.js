@@ -1579,6 +1579,9 @@ const unitAllocationSchema = new mongoose.Schema({
   assignedTo: { type: String, required: true }, // Canonical field for mobile
   assignedAgent: String, // Alias for web/legacy clients
   allocatedBy: String,
+  customerName: String, // Customer name for SMS notifications
+  customerEmail: String, // Customer email
+  customerPhone: String, // Customer phone number for SMS
   status: { type: String, default: 'Active' },
   createdAt: { type: Date, default: Date.now },
   updatedAt: Date
@@ -1753,6 +1756,47 @@ app.put('/api/updateUnitAllocation/:id', async (req, res) => {
     res.json({ success: true, message: 'Unit allocation updated successfully', data: updatedAllocation });
   } catch (error) {
     console.error('❌ Update unit allocation error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Update unit allocation customer info (for SMS notifications)
+app.post('/api/updateUnitCustomerInfo', async (req, res) => {
+  try {
+    const { unitId, customerName, customerEmail, customerPhone } = req.body;
+    
+    if (!unitId) {
+      return res.status(400).json({ success: false, message: 'Unit ID is required' });
+    }
+
+    console.log(`📋 Updating customer info for unit ${unitId}`);
+    
+    const updatedAllocation = await UnitAllocation.findOneAndUpdate(
+      { unitId: unitId },
+      { 
+        customerName: customerName || '',
+        customerEmail: customerEmail || '',
+        customerPhone: customerPhone || '',
+        updatedAt: new Date()
+      },
+      { new: true }
+    );
+    
+    if (!updatedAllocation) {
+      return res.status(404).json({ 
+        success: false, 
+        message: 'Unit allocation not found. Make sure the unit is allocated to an agent first.' 
+      });
+    }
+    
+    console.log('✅ Updated customer info for unit:', unitId);
+    res.json({ 
+      success: true, 
+      message: 'Customer information updated successfully', 
+      data: updatedAllocation 
+    });
+  } catch (error) {
+    console.error('❌ Update customer info error:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
