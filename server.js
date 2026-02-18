@@ -6,6 +6,7 @@ const bcrypt = require('bcryptjs');
 const session = require('express-session');
 const MongoStore = require('connect-mongo');
 const nodemailer = require('nodemailer');
+const axios = require('axios');
 
 const app = express();
 

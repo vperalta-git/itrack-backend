@@ -12,6 +12,7 @@
     "@faker-js/faker": "^9.0.3",
     "@google/generative-ai": "^0.24.1",
     "@react-native-picker/picker": "^2.11.4",
+    "axios": "^1.13.5",
     "bcryptjs": "^2.4.3",
     "connect-mongo": "^5.1.0",
     "cors": "^2.8.5",
