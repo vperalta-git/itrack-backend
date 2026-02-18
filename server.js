@@ -4031,9 +4031,8 @@ app.post('/api/send-notification', async (req, res) => {
       return trimmed;
     };
 
-    const smsApiUrl = process.env.SMS_API_URL || 'https://sms-api-ph-gceo.onrender.com/send';
+    const smsApiUrl = process.env.SMS_API_URL || 'https://sms-api-ph-gceo.onrender.com/send/sms';
     const smsApiKey = process.env.SMS_API_KEY;
-    const smsSenderId = process.env.SMS_SENDER_ID || 'I-Track_Pasig';
 
     // ── SMS-only path ──────────────────────────────────────────────────────────
     if (smsOnly) {
@@ -4059,7 +4058,7 @@ app.post('/api/send-notification', async (req, res) => {
       try {
         await axios.post(
           smsApiUrl,
-          { senderId: smsSenderId, recipient: normalizedPhone, message: smsMessage },
+          { recipient: normalizedPhone, message: smsMessage },
           { headers: { 'Content-Type': 'application/json', 'x-api-key': smsApiKey } }
         );
         console.log('✅ SMS sent successfully to:', normalizedPhone);
@@ -4251,7 +4250,6 @@ app.post('/api/send-notification', async (req, res) => {
         await axios.post(
           smsApiUrl,
           {
-            senderId: smsSenderId,
             recipient: normalizedPhone,
             message: smsMessage
           },
