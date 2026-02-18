@@ -4015,12 +4015,19 @@ app.get('/test', (req, res) => {
 });
 
 // Email + SMS Notification System
-// POST /api/send-notification - Send SMS (and optional email) notification to customer
+// POST /api/send-notification - Send SMS notification to customer
 app.post('/api/send-notification', async (req, res) => {
   try {
-    const { customerEmail, customerName, customerPhone, vehicleModel, vin, status, processDetails, smsOnly, message } = req.body;
+    const { customerName, customerPhone, vehicleModel, vin, status, processDetails, message } = req.body;
 
-    console.log('📱 Sending notification:', { customerName, customerPhone, vehicleModel, status, smsOnly });
+    console.log('📱 Sending SMS notification:', { customerName, customerPhone, vehicleModel, status });
+
+    if (!customerPhone || !customerName) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: customerPhone, customerName'
+      });
+    }
 
     const normalizePhone = (phone) => {
       if (!phone) return '';
@@ -4034,250 +4041,54 @@ app.post('/api/send-notification', async (req, res) => {
     const smsApiUrl = process.env.SMS_API_URL || 'https://sms-api-ph-gceo.onrender.com/send/sms';
     const smsApiKey = process.env.SMS_API_KEY;
 
-    // ── SMS-only path ──────────────────────────────────────────────────────────
-    if (smsOnly) {
-      if (!customerPhone || !customerName) {
-        return res.status(400).json({
-          success: false,
-          message: 'Missing required fields: customerPhone, customerName'
-        });
-      }
-
-      const normalizedPhone = normalizePhone(customerPhone);
-      const smsMessage = message || `Hi ${customerName}, your vehicle ${vin || vehicleModel || ''} status has been updated. Thank you for choosing Isuzu Pasig.`;
-
-      if (!smsApiKey) {
-        console.warn('⚠️  SMS_API_KEY not set — skipping SMS send');
-        return res.json({
-          success: true,
-          smsSent: false,
-          message: 'SMS skipped: API key not configured'
-        });
-      }
-
-      try {
-        await axios.post(
-          smsApiUrl,
-          { recipient: normalizedPhone, message: smsMessage },
-          { headers: { 'Content-Type': 'application/json', 'x-api-key': smsApiKey } }
-        );
-        console.log('✅ SMS sent successfully to:', normalizedPhone);
-        return res.json({ success: true, smsSent: true, message: 'SMS notification sent successfully' });
-      } catch (smsErr) {
-        console.error('❌ SMS send error:', smsErr.message || smsErr);
-        return res.status(500).json({ success: false, message: `Failed to send SMS: ${smsErr.message || 'Unknown error'}` });
-      }
-    }
-
-    // ── Email + optional SMS path ──────────────────────────────────────────────
-    if (!customerEmail || !customerName || !vehicleModel || !status) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields: customerEmail, customerName, vehicleModel, status'
+    if (!smsApiKey) {
+      console.warn('⚠️  SMS_API_KEY not set — skipping SMS send');
+      return res.json({
+        success: true,
+        smsSent: false,
+        message: 'SMS skipped: API key not configured'
       });
     }
 
-    const getNotificationTemplate = (status, processDetails = '') => {
-      const currentDate = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
-      
-      switch (status.toLowerCase()) {
-        case 'vehicle preparation':
-        case 'in preparation':
-        case 'tinting':
-        case 'car wash':
-        case 'rust proof':
-        case 'accessories':
-        case 'ceramic coating':
-          return {
-            subject: `Isuzu Pasig - Vehicle Preparation Update for ${vehicleModel}`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background-color: #ff1e1e; padding: 20px; text-align: center;">
-                  <h2 style="color: white; margin: 0;">Isuzu Pasig</h2>
-                </div>
-                <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #e0e0e0;">
-                  <p style="font-size: 16px; line-height: 1.6; color: #333;">
-                    Hi ${customerName}, this is Isuzu Pasig. Your vehicle <strong>${vin || vehicleModel}</strong> is now undergoing <strong>${processDetails || status}</strong>. Thank you for choosing Isuzu Pasig.
-                  </p>
-                </div>
-                <div style="margin-top: 20px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
-                  <p style="margin: 0; font-size: 14px;"><strong>Vehicle Details:</strong></p>
-                  <p style="margin: 5px 0; font-size: 14px;">Model: ${vehicleModel}</p>
-                  ${vin ? `<p style="margin: 5px 0; font-size: 14px;">VIN/Unit ID: ${vin}</p>` : ''}
-                  <p style="margin: 5px 0; font-size: 14px;">Process: ${processDetails || status}</p>
-                  <p style="margin: 5px 0; font-size: 14px;">Date: ${currentDate}</p>
-                </div>
-                <div style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #e0e0e0;">
-                  <p style="color: #666; font-size: 12px; margin: 0;">I-Track Vehicle Management System</p>
-                  <p style="color: #666; font-size: 12px; margin: 5px 0 0 0;">Isuzu Pasig | Automotive</p>
-                </div>
-              </div>
-            `
-          };
+    const normalizedPhone = normalizePhone(customerPhone);
 
-        case 'dispatch & arrival':
-        case 'in transit':
-        case 'arriving':
-          const driverName = processDetails || '[Driver Name]';
-          return {
-            subject: `Isuzu Pasig - Vehicle Dispatch Alert for ${vehicleModel}`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background-color: #ff1e1e; padding: 20px; text-align: center;">
-                  <h2 style="color: white; margin: 0;">Isuzu Pasig</h2>
-                </div>
-                <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #e0e0e0;">
-                  <p style="font-size: 16px; line-height: 1.6; color: #333;">
-                    The vehicle <strong>${vin || vehicleModel}</strong> driven by <strong>${driverName}</strong> is arriving shortly at Isuzu Pasig.
-                  </p>
-                </div>
-                <div style="margin-top: 20px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
-                  <p style="margin: 0; font-size: 14px;"><strong>Vehicle Details:</strong></p>
-                  <p style="margin: 5px 0; font-size: 14px;">Model: ${vehicleModel}</p>
-                  ${vin ? `<p style="margin: 5px 0; font-size: 14px;">VIN/Unit ID: ${vin}</p>` : ''}
-                  <p style="margin: 5px 0; font-size: 14px;">Driver: ${driverName}</p>
-                  <p style="margin: 5px 0; font-size: 14px;">Status: In Transit</p>
-                  <p style="margin: 5px 0; font-size: 14px;">Date: ${currentDate}</p>
-                </div>
-                <div style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #e0e0e0;">
-                  <p style="color: #666; font-size: 12px; margin: 0;">I-Track Vehicle Management System</p>
-                  <p style="color: #666; font-size: 12px; margin: 5px 0 0 0;">Isuzu Pasig | Automotive</p>
-                </div>
-              </div>
-            `
-          };
+    // Build SMS message
+    const getSmsMessage = () => {
+      if (message) return message;
 
-        case 'ready for release':
-        case 'done':
-        case 'completed':
-        case 'ready':
-          return {
-            subject: `Isuzu Pasig - Vehicle Ready for Release: ${vehicleModel}`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background-color: #ff1e1e; padding: 20px; text-align: center;">
-                  <h2 style="color: white; margin: 0;">Isuzu Pasig</h2>
-                </div>
-                <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #e0e0e0;">
-                  <p style="font-size: 16px; line-height: 1.6; color: #333;">
-                    Good news! Your vehicle is now ready for release. Please proceed to Isuzu Pasig or contact your sales agent for pickup details. Thank you for choosing Isuzu.
-                  </p>
-                </div>
-                <div style="margin-top: 20px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
-                  <p style="margin: 0; font-size: 14px;"><strong>Vehicle Details:</strong></p>
-                  <p style="margin: 5px 0; font-size: 14px;">Model: ${vehicleModel}</p>
-                  ${vin ? `<p style="margin: 5px 0; font-size: 14px;">VIN/Unit ID: ${vin}</p>` : ''}
-                  <p style="margin: 5px 0; font-size: 14px;">Status: Ready for Release</p>
-                  <p style="margin: 5px 0; font-size: 14px;">Date: ${currentDate}</p>
-                </div>
-                <div style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #e0e0e0;">
-                  <p style="color: #666; font-size: 12px; margin: 0;">I-Track Vehicle Management System</p>
-                  <p style="color: #666; font-size: 12px; margin: 5px 0 0 0;">Isuzu Pasig | Automotive</p>
-                </div>
-              </div>
-            `
-          };
-
-        default:
-          return {
-            subject: `Isuzu Pasig - Vehicle Status Update: ${vehicleModel}`,
-            html: `
-              <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                <div style="background-color: #ff1e1e; padding: 20px; text-align: center;">
-                  <h2 style="color: white; margin: 0;">Isuzu Pasig</h2>
-                </div>
-                <div style="background-color: #f9f9f9; padding: 30px; border: 1px solid #e0e0e0;">
-                  <p style="font-size: 16px; line-height: 1.6; color: #333;">
-                    Your vehicle <strong>${vehicleModel}</strong> status has been updated to: <strong>${status}</strong>
-                  </p>
-                </div>
-                <div style="margin-top: 20px; padding: 15px; background-color: #e8f4f8; border-radius: 5px;">
-                  <p style="margin: 0; font-size: 14px;"><strong>Vehicle Details:</strong></p>
-                  <p style="margin: 5px 0; font-size: 14px;">Model: ${vehicleModel}</p>
-                  ${vin ? `<p style="margin: 5px 0; font-size: 14px;">VIN/Unit ID: ${vin}</p>` : ''}
-                  <p style="margin: 5px 0; font-size: 14px;">Status: ${status}</p>
-                  <p style="margin: 5px 0; font-size: 14px;">Date: ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}</p>
-                </div>
-                <div style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #e0e0e0;">
-                  <p style="color: #666; font-size: 12px; margin: 0;">I-Track Vehicle Management System</p>
-                  <p style="color: #666; font-size: 12px; margin: 5px 0 0 0;">Isuzu Pasig | Automotive</p>
-                </div>
-              </div>
-            `
-          };
-      }
-    };
-
-    const template = getNotificationTemplate(status, processDetails);
-
-    const getSmsTemplate = (statusValue, processDetailsValue = '') => {
-      const normalizedStatus = (statusValue || '').toLowerCase();
-      const vinOrModel = vin || vehicleModel;
+      const vinOrModel = vin || vehicleModel || '';
+      const normalizedStatus = (status || '').toLowerCase();
 
       if ([
         'vehicle preparation', 'in preparation', 'tinting',
         'car wash', 'rust proof', 'accessories', 'ceramic coating'
       ].includes(normalizedStatus)) {
-        return `Hi ${customerName}, this is Isuzu Pasig. Your vehicle ${vinOrModel} is now undergoing ${processDetailsValue || statusValue}. Thank you for choosing Isuzu Pasig.`;
+        return `Hi ${customerName}, this is Isuzu Pasig. Your vehicle ${vinOrModel} is now undergoing ${processDetails || status}. Thank you for choosing Isuzu Pasig.`;
       }
       if (['dispatch & arrival', 'in transit', 'arriving'].includes(normalizedStatus)) {
-        const driverName = processDetailsValue || '[Driver]';
+        const driverName = processDetails || '[Driver]';
         return `The vehicle ${vinOrModel} driven by ${driverName} is arriving shortly at Isuzu Pasig.`;
       }
       if (['ready for release', 'done', 'completed', 'ready'].includes(normalizedStatus)) {
         return `Good news ${customerName}! Your vehicle ${vinOrModel} is now ready for release. Please contact your sales agent for more details. Thank you for trusting Isuzu Pasig!`;
       }
-      return `Your vehicle ${vinOrModel} status is now ${statusValue}.`;
+      return `Hi ${customerName}, your vehicle ${vinOrModel} status has been updated. Thank you for choosing Isuzu Pasig.`;
     };
 
-    const mailOptions = {
-      from: process.env.EMAIL_USER || 'itrack@isuzupasig.com',
-      to: customerEmail,
-      subject: template.subject,
-      html: template.html
-    };
+    const smsMessage = getSmsMessage();
 
-    await transporter.sendMail(mailOptions);
-    console.log('✅ Email notification sent successfully to:', customerEmail);
-
-    let smsSent = false;
-    let smsError = null;
-    const normalizedPhone = normalizePhone(customerPhone);
-
-    if (smsApiUrl && smsApiKey && normalizedPhone) {
-      try {
-        const smsMessage = getSmsTemplate(status, processDetails);
-        await axios.post(
-          smsApiUrl,
-          {
-            recipient: normalizedPhone,
-            message: smsMessage
-          },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': smsApiKey
-            }
-          }
-        );
-        smsSent = true;
-        console.log('✅ SMS notification sent successfully to:', normalizedPhone);
-      } catch (smsErr) {
-        smsError = smsErr.message || 'Failed to send SMS';
-        console.error('❌ SMS notification error:', smsErr.message || smsErr);
-      }
+    try {
+      await axios.post(
+        smsApiUrl,
+        { recipient: normalizedPhone, message: smsMessage },
+        { headers: { 'Content-Type': 'application/json', 'x-api-key': smsApiKey } }
+      );
+      console.log('✅ SMS sent successfully to:', normalizedPhone);
+      return res.json({ success: true, smsSent: true, message: 'SMS notification sent successfully' });
+    } catch (smsErr) {
+      console.error('❌ SMS send error:', smsErr.message || smsErr);
+      return res.status(500).json({ success: false, smsSent: false, message: `Failed to send SMS: ${smsErr.message || 'Unknown error'}` });
     }
-
-    res.json({
-      success: true,
-      message: 'Notification sent successfully',
-      emailSent: true,
-      smsSent,
-      smsError,
-      notificationMethod: smsSent ? 'email+sms' : 'email',
-      recipient: customerEmail,
-      validityPeriod: '1/27/2026 - 1/27/2027'
-    });
 
   } catch (error) {
     console.error('❌ Notification error:', error);
