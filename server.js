@@ -4078,10 +4078,14 @@ app.post('/api/send-notification', async (req, res) => {
           message: 'SMS notification sent successfully'
         });
       } catch (smsErr) {
-        console.error('❌ SMS send error:', smsErr.message || smsErr);
-        return res.status(500).json({
+        const smsApiError = smsErr.response?.data || smsErr.message || 'Unknown error';
+        const smsStatus = smsErr.response?.status;
+        console.error('❌ SMS send error:', smsStatus, smsApiError);
+        // Return 200 so frontend handles it as a soft failure (vehicle already released)
+        return res.json({
           success: false,
-          message: `Failed to send SMS: ${smsErr.message || 'Unknown error'}`
+          smsSent: false,
+          message: `SMS not sent: ${typeof smsApiError === 'object' ? JSON.stringify(smsApiError) : smsApiError} (HTTP ${smsStatus || 'N/A'})`
         });
       }
     }
