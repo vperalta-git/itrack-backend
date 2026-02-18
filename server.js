@@ -4031,9 +4031,36 @@ app.post('/api/send-notification', async (req, res) => {
       return trimmed;
     };
 
-    const smsApiUrl = process.env.SMS_API_URL || 'https://sms-api-ph-gceo.onrender.com/send';
     const smsApiKey = process.env.SMS_API_KEY;
-    const smsSenderId = process.env.SMS_SENDER_ID || 'I-Track_Pasig';
+    const smsSenderId = process.env.SMS_SENDER_ID || 'I-Track';
+
+    // Helper to send SMS via Semaphore (Philippine SMS gateway)
+    const sendSMS = async (phone, msg) => {
+      if (!smsApiKey) {
+        return { sent: false, reason: 'SMS_API_KEY not configured on server' };
+      }
+
+      // Semaphore expects local format: 09XXXXXXXXX
+      let localPhone = phone.replace(/^\+63/, '0').replace(/^63/, '0');
+      if (!localPhone.startsWith('0')) localPhone = '0' + localPhone;
+
+      console.log(`📱 Sending SMS via Semaphore to ${localPhone}`);
+      const response = await axios.post(
+        'https://api.semaphore.co/api/v4/messages',
+        new URLSearchParams({
+          apikey: smsApiKey,
+          number: localPhone,
+          message: msg,
+          sendername: smsSenderId,
+        }).toString(),
+        {
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          timeout: 15000,
+        }
+      );
+      console.log('📱 Semaphore response:', JSON.stringify(response.data));
+      return { sent: true, data: response.data };
+    };
 
     // ── SMS-only path ──────────────────────────────────────────────────────────
     if (smsOnly) {
@@ -4057,31 +4084,25 @@ app.post('/api/send-notification', async (req, res) => {
       }
 
       try {
-        await axios.post(
-          smsApiUrl,
-          {
-            senderId: smsSenderId,
-            recipient: normalizedPhone,
-            message: smsMessage
-          },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': smsApiKey
-            }
-          }
-        );
-        console.log('✅ SMS sent successfully to:', normalizedPhone);
-        return res.json({
-          success: true,
-          smsSent: true,
-          message: 'SMS notification sent successfully'
-        });
+        const smsResult = await sendSMS(normalizedPhone, smsMessage);
+        if (smsResult.sent) {
+          console.log('✅ SMS sent successfully to:', normalizedPhone);
+          return res.json({
+            success: true,
+            smsSent: true,
+            message: 'SMS notification sent successfully'
+          });
+        } else {
+          return res.json({
+            success: false,
+            smsSent: false,
+            message: `SMS not sent: ${smsResult.reason}`
+          });
+        }
       } catch (smsErr) {
         const smsApiError = smsErr.response?.data || smsErr.message || 'Unknown error';
         const smsStatus = smsErr.response?.status;
         console.error('❌ SMS send error:', smsStatus, smsApiError);
-        // Return 200 so frontend handles it as a soft failure (vehicle already released)
         return res.json({
           success: false,
           smsSent: false,
@@ -4265,19 +4286,16 @@ app.post('/api/send-notification', async (req, res) => {
     let smsError = null;
     const normalizedPhone = normalizePhone(customerPhone);
 
-    if (smsApiUrl && smsApiKey && normalizedPhone) {
+    if (smsApiKey && normalizedPhone) {
       try {
         const smsMessage = getSmsTemplate(status, processDetails);
-        await axios.post(
-          smsApiUrl,
-          { senderId: smsSenderId, recipient: normalizedPhone, message: smsMessage },
-          { headers: { 'Content-Type': 'application/json', 'x-api-key': smsApiKey } }
-        );
-        smsSent = true;
-        console.log('✅ SMS notification sent successfully to:', normalizedPhone);
+        const smsResult = await sendSMS(normalizedPhone, smsMessage);
+        smsSent = smsResult.sent;
+        if (!smsResult.sent) smsError = smsResult.reason;
+        else console.log('✅ SMS notification sent successfully to:', normalizedPhone);
       } catch (smsErr) {
-        smsError = smsErr.message || 'Failed to send SMS';
-        console.error('❌ SMS notification error:', smsErr.message || smsErr);
+        smsError = smsErr.response?.data || smsErr.message || 'Failed to send SMS';
+        console.error('❌ SMS notification error:', smsError);
       }
     }
 
