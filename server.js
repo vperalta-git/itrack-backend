@@ -4198,7 +4198,7 @@ app.post('/api/send-notification', async (req, res) => {
       }
 
       if (['ready for release', 'done', 'completed', 'ready'].includes(normalizedStatus)) {
-        return 'Good news! Your vehicle is now ready for release. Please proceed to Isuzu Pasig or contact your sales agent for pickup details. Thank you for choosing Isuzu.';
+        return `Good news ${customerName}! Your vehicle ${vinOrModel} ${unitName ? `(${unitName})` : ''} is now ready for release. Please contact your sales agent for more details and assistance. Thank you for trusting Isuzu Pasig!`;
       }
 
       return `Your vehicle ${vinOrModel} status is now ${statusValue}.`;
