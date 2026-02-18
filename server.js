@@ -4014,19 +4014,12 @@ app.get('/test', (req, res) => {
 });
 
 // Email + SMS Notification System
-// POST /api/send-notification - Send email/SMS notification to customer
+// POST /api/send-notification - Send SMS (and optional email) notification to customer
 app.post('/api/send-notification', async (req, res) => {
   try {
-    const { customerEmail, customerName, customerPhone, vehicleModel, vin, status, processDetails } = req.body;
-    
-    console.log('📧 Sending notification:', { customerEmail, customerName, vehicleModel, status });
-    
-    if (!customerEmail || !customerName || !vehicleModel || !status) {
-      return res.status(400).json({
-        success: false,
-        message: 'Missing required fields: customerEmail, customerName, vehicleModel, status'
-      });
-    }
+    const { customerEmail, customerName, customerPhone, vehicleModel, vin, status, processDetails, smsOnly, message } = req.body;
+
+    console.log('📱 Sending notification:', { customerName, customerPhone, vehicleModel, status, smsOnly });
 
     const normalizePhone = (phone) => {
       if (!phone) return '';
@@ -4041,8 +4034,65 @@ app.post('/api/send-notification', async (req, res) => {
     const smsApiKey = process.env.SMS_API_KEY;
     const smsSenderId = process.env.SMS_SENDER_ID || 'I-Track_Pasig';
 
-    // Define notification templates based on the official Isuzu Pasig templates
-    // Valid from: 1/27/2026 to 1/27/2027
+    // ── SMS-only path ──────────────────────────────────────────────────────────
+    if (smsOnly) {
+      if (!customerPhone || !customerName) {
+        return res.status(400).json({
+          success: false,
+          message: 'Missing required fields: customerPhone, customerName'
+        });
+      }
+
+      const normalizedPhone = normalizePhone(customerPhone);
+      const smsMessage = message || `Hi ${customerName}, your vehicle ${vin || vehicleModel || ''} status has been updated. Thank you for choosing Isuzu Pasig.`;
+
+      if (!smsApiKey) {
+        console.warn('⚠️  SMS_API_KEY not set — skipping SMS send');
+        return res.json({
+          success: true,
+          smsSent: false,
+          message: 'SMS skipped: API key not configured'
+        });
+      }
+
+      try {
+        await axios.post(
+          smsApiUrl,
+          {
+            senderId: smsSenderId,
+            recipient: normalizedPhone,
+            message: smsMessage
+          },
+          {
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': smsApiKey
+            }
+          }
+        );
+        console.log('✅ SMS sent successfully to:', normalizedPhone);
+        return res.json({
+          success: true,
+          smsSent: true,
+          message: 'SMS notification sent successfully'
+        });
+      } catch (smsErr) {
+        console.error('❌ SMS send error:', smsErr.message || smsErr);
+        return res.status(500).json({
+          success: false,
+          message: `Failed to send SMS: ${smsErr.message || 'Unknown error'}`
+        });
+      }
+    }
+
+    // ── Email + optional SMS path ──────────────────────────────────────────────
+    if (!customerEmail || !customerName || !vehicleModel || !status) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields: customerEmail, customerName, vehicleModel, status'
+      });
+    }
+
     const getNotificationTemplate = (status, processDetails = '') => {
       const currentDate = new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' });
       
@@ -4080,7 +4130,7 @@ app.post('/api/send-notification', async (req, res) => {
               </div>
             `
           };
-          
+
         case 'dispatch & arrival':
         case 'in transit':
         case 'arriving':
@@ -4112,7 +4162,7 @@ app.post('/api/send-notification', async (req, res) => {
               </div>
             `
           };
-          
+
         case 'ready for release':
         case 'done':
         case 'completed':
@@ -4143,7 +4193,7 @@ app.post('/api/send-notification', async (req, res) => {
               </div>
             `
           };
-          
+
         default:
           return {
             subject: `Isuzu Pasig - Vehicle Status Update: ${vehicleModel}`,
@@ -4162,7 +4212,7 @@ app.post('/api/send-notification', async (req, res) => {
                   <p style="margin: 5px 0; font-size: 14px;">Model: ${vehicleModel}</p>
                   ${vin ? `<p style="margin: 5px 0; font-size: 14px;">VIN/Unit ID: ${vin}</p>` : ''}
                   <p style="margin: 5px 0; font-size: 14px;">Status: ${status}</p>
-                  <p style="margin: 5px 0; font-size: 14px;">Date: ${currentDate}</p>
+                  <p style="margin: 5px 0; font-size: 14px;">Date: ${new Date().toLocaleDateString('en-US', { month: '2-digit', day: '2-digit', year: 'numeric' })}</p>
                 </div>
                 <div style="text-align: center; margin-top: 30px; padding: 20px; border-top: 1px solid #e0e0e0;">
                   <p style="color: #666; font-size: 12px; margin: 0;">I-Track Vehicle Management System</p>
@@ -4181,30 +4231,21 @@ app.post('/api/send-notification', async (req, res) => {
       const vinOrModel = vin || vehicleModel;
 
       if ([
-        'vehicle preparation',
-        'in preparation',
-        'tinting',
-        'car wash',
-        'rust proof',
-        'accessories',
-        'ceramic coating'
+        'vehicle preparation', 'in preparation', 'tinting',
+        'car wash', 'rust proof', 'accessories', 'ceramic coating'
       ].includes(normalizedStatus)) {
         return `Hi ${customerName}, this is Isuzu Pasig. Your vehicle ${vinOrModel} is now undergoing ${processDetailsValue || statusValue}. Thank you for choosing Isuzu Pasig.`;
       }
-
       if (['dispatch & arrival', 'in transit', 'arriving'].includes(normalizedStatus)) {
         const driverName = processDetailsValue || '[Driver]';
         return `The vehicle ${vinOrModel} driven by ${driverName} is arriving shortly at Isuzu Pasig.`;
       }
-
       if (['ready for release', 'done', 'completed', 'ready'].includes(normalizedStatus)) {
-        return `Good news ${customerName}! Your vehicle ${vinOrModel} ${unitName ? `(${unitName})` : ''} is now ready for release. Please contact your sales agent for more details and assistance. Thank you for trusting Isuzu Pasig!`;
+        return `Good news ${customerName}! Your vehicle ${vinOrModel} is now ready for release. Please contact your sales agent for more details. Thank you for trusting Isuzu Pasig!`;
       }
-
       return `Your vehicle ${vinOrModel} status is now ${statusValue}.`;
     };
-    
-    // Configure email
+
     const mailOptions = {
       from: process.env.EMAIL_USER || 'itrack@isuzupasig.com',
       to: customerEmail,
@@ -4212,12 +4253,9 @@ app.post('/api/send-notification', async (req, res) => {
       html: template.html
     };
 
-    // Send email
     await transporter.sendMail(mailOptions);
-    
     console.log('✅ Email notification sent successfully to:', customerEmail);
 
-    // Send SMS (optional if API key and phone are available)
     let smsSent = false;
     let smsError = null;
     const normalizedPhone = normalizePhone(customerPhone);
@@ -4227,17 +4265,8 @@ app.post('/api/send-notification', async (req, res) => {
         const smsMessage = getSmsTemplate(status, processDetails);
         await axios.post(
           smsApiUrl,
-          {
-            senderId: smsSenderId,
-            recipient: normalizedPhone,
-            message: smsMessage
-          },
-          {
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': smsApiKey
-            }
-          }
+          { senderId: smsSenderId, recipient: normalizedPhone, message: smsMessage },
+          { headers: { 'Content-Type': 'application/json', 'x-api-key': smsApiKey } }
         );
         smsSent = true;
         console.log('✅ SMS notification sent successfully to:', normalizedPhone);
@@ -4246,7 +4275,7 @@ app.post('/api/send-notification', async (req, res) => {
         console.error('❌ SMS notification error:', smsErr.message || smsErr);
       }
     }
-    
+
     res.json({
       success: true,
       message: 'Notification sent successfully',
@@ -4257,9 +4286,9 @@ app.post('/api/send-notification', async (req, res) => {
       recipient: customerEmail,
       validityPeriod: '1/27/2026 - 1/27/2027'
     });
-    
+
   } catch (error) {
-    console.error('❌ Email notification error:', error);
+    console.error('❌ Notification error:', error);
     res.status(500).json({
       success: false,
       message: 'Failed to send notification',
@@ -4267,7 +4296,6 @@ app.post('/api/send-notification', async (req, res) => {
     });
   }
 });
-
 // GET /api/servicerequests - Get service requests for dispatch
 app.get('/api/servicerequests', async (req, res) => {
   try {
