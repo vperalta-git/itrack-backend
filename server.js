@@ -4131,27 +4131,28 @@ app.post('/api/send-notification', async (req, res) => {
 
     const normalizedPhone = normalizePhone(customerPhone);
 
-    // Build SMS message
+    // Build SMS message (max 120 chars for SMS API)
     const getSmsMessage = () => {
-      if (message) return message;
+      // If a custom message is provided, truncate to 120 chars
+      if (message) return message.substring(0, 120);
 
-      const vinOrModel = vin || vehicleModel || '';
+      const name = customerName || 'Customer';
+      const unit = vin || vehicleModel || '';
       const normalizedStatus = (status || '').toLowerCase();
 
       if ([
         'vehicle preparation', 'in preparation', 'tinting',
         'car wash', 'rust proof', 'accessories', 'ceramic coating'
       ].includes(normalizedStatus)) {
-        return `Hi ${customerName}, this is Isuzu Pasig. Your vehicle ${vinOrModel} is now undergoing ${processDetails || status}. Thank you for choosing Isuzu Pasig.`;
+        return `Hi ${name}, your ${unit} is undergoing ${processDetails || status}. -Isuzu Pasig`.substring(0, 120);
       }
       if (['dispatch & arrival', 'in transit', 'arriving'].includes(normalizedStatus)) {
-        const driverName = processDetails || '[Driver]';
-        return `The vehicle ${vinOrModel} driven by ${driverName} is arriving shortly at Isuzu Pasig.`;
+        return `Hi ${name}, your ${unit} is arriving shortly. -Isuzu Pasig`.substring(0, 120);
       }
       if (['ready for release', 'done', 'completed', 'ready'].includes(normalizedStatus)) {
-        return `Good news ${customerName}! Your vehicle ${vinOrModel} is now ready for release. Please contact your sales agent for more details. Thank you for trusting Isuzu Pasig!`;
+        return `Hi ${name}! Your ${unit} is ready for release. Contact your agent for details. -Isuzu Pasig`.substring(0, 120);
       }
-      return `Hi ${customerName}, your vehicle ${vinOrModel} status has been updated. Thank you for choosing Isuzu Pasig.`;
+      return `Hi ${name}, your ${unit} status updated to: ${status || 'Updated'}. -Isuzu Pasig`.substring(0, 120);
     };
 
     const smsMessage = getSmsMessage();
