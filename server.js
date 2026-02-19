@@ -1228,8 +1228,9 @@ const Inventory = mongoose.model('Inventory', InventorySchema, 'inventories');
 // Get all stock/inventory
 app.get('/getStock', async (req, res) => {
   try {
-    const inventory = await Inventory.find({}).sort({ createdAt: -1 });
-    console.log(`📊 Found ${inventory.length} inventory items`);
+    // Exclude Released vehicles from stock listing
+    const inventory = await Inventory.find({ status: { $ne: 'Released' } }).sort({ createdAt: -1 });
+    console.log(`📊 Found ${inventory.length} inventory items (excluding Released)`);
     res.json({ success: true, data: inventory });
   } catch (error) {
     console.error('❌ Get stock error:', error);
@@ -4674,6 +4675,15 @@ app.put('/releaseToCustomer/:id', async (req, res) => {
     request.releasedBy = releasedBy;
     request.releasedAt = new Date();
     await request.save();
+
+    // Also mark inventory item as Released so it no longer shows in vehicle stocks
+    if (request.unitId) {
+      await Inventory.findOneAndUpdate(
+        { $or: [{ unitId: request.unitId }, { conductionNumber: request.unitId }] },
+        { status: 'Released', lastUpdatedBy: releasedBy || 'System', dateUpdated: new Date() }
+      );
+      console.log('📦 Inventory status updated to Released for:', request.unitId);
+    }
     
     console.log('✅ Released to customer:', request.unitName);
     res.json({ success: true, data: request });
