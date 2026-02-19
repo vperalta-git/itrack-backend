@@ -4093,13 +4093,13 @@ app.get('/test', (req, res) => {
   });
 });
 
-// Email + SMS Notification System
-// POST /api/send-notification - Send SMS notification to customer
+// SMS Notification System (SMS-API-PH only)
+// POST /api/send-notification - Send SMS notification to customer via sms-api-ph
 app.post('/api/send-notification', async (req, res) => {
   try {
-    const { customerName, customerPhone, vehicleModel, vin, status, processDetails, message } = req.body;
+    const { customerName, customerPhone, vehicleModel, vin, status, processDetails, message, smsOnly } = req.body;
 
-    console.log('📱 Sending SMS notification:', { customerName, customerPhone, vehicleModel, status });
+    console.log('📱 Sending SMS notification:', { customerName, customerPhone, vehicleModel, status, smsOnly });
 
     if (!customerPhone || !customerName) {
       return res.status(400).json({
@@ -4117,8 +4117,10 @@ app.post('/api/send-notification', async (req, res) => {
       return trimmed;
     };
 
-    const smsApiUrl = 'https://sms-api-ph-gceo.onrender.com/send/sms';
+    // SMS-API-PH configuration (single provider — no ITEXMO, no fallbacks)
+    const smsApiUrl = process.env.SMS_API_URL || 'https://sms-api-ph-gceo.onrender.com/send';
     const smsApiKey = process.env.SMS_API_KEY;
+    const smsSenderId = process.env.SMS_SENDER_ID || 'I-Track_Pasig';
 
     if (!smsApiKey) {
       console.warn('⚠️  SMS_API_KEY not set — skipping SMS send');
@@ -4131,9 +4133,19 @@ app.post('/api/send-notification', async (req, res) => {
 
     const normalizedPhone = normalizePhone(customerPhone);
 
+    // Validate Philippine phone number format (must be 11 digits: 09XXXXXXXXX → +639XXXXXXXXX)
+    const phoneDigits = normalizedPhone.replace(/\D/g, '');
+    if (phoneDigits.length !== 12) { // +63 prefix = 2 digits + 10 local digits = 12
+      console.warn('⚠️  Invalid phone number format:', { original: customerPhone, normalized: normalizedPhone, digits: phoneDigits.length });
+      return res.status(400).json({
+        success: false,
+        smsSent: false,
+        message: `Invalid Philippine phone number: ${customerPhone}. Must be 11 digits (e.g. 09XXXXXXXXX)`
+      });
+    }
+
     // Build SMS message (max 120 chars for SMS API)
     const getSmsMessage = () => {
-      // If a custom message is provided, truncate to 120 chars
       if (message) return message.substring(0, 120);
 
       const name = customerName || 'Customer';
@@ -4157,21 +4169,52 @@ app.post('/api/send-notification', async (req, res) => {
 
     const smsMessage = getSmsMessage();
 
-    console.log('📤 SMS Request:', { url: smsApiUrl, recipient: normalizedPhone, messageLength: smsMessage.length, apiKeyPresent: !!smsApiKey, apiKeyFirst8: smsApiKey ? smsApiKey.substring(0, 8) : 'none' });
+    console.log('📤 SMS Request:', {
+      url: smsApiUrl,
+      senderId: smsSenderId,
+      recipient: normalizedPhone,
+      messageLength: smsMessage.length,
+      apiKeyPresent: !!smsApiKey,
+      apiKeyFirst8: smsApiKey ? smsApiKey.substring(0, 8) : 'none'
+    });
 
     try {
       const smsResponse = await axios.post(
         smsApiUrl,
-        { recipient: normalizedPhone, message: smsMessage },
-        { headers: { 'Content-Type': 'application/json', 'x-api-key': smsApiKey } }
+        { senderId: smsSenderId, recipient: normalizedPhone, message: smsMessage },
+        {
+          headers: { 'Content-Type': 'application/json', 'x-api-key': smsApiKey },
+          timeout: 30000
+        }
       );
-      console.log('✅ SMS sent successfully to:', normalizedPhone, 'Response:', JSON.stringify(smsResponse.data));
-      return res.json({ success: true, smsSent: true, message: 'SMS notification sent successfully' });
+
+      const smsData = smsResponse.data || {};
+      const smsState = smsData.sms_response?.state || 'unknown';
+
+      console.log('✅ SMS sent to:', normalizedPhone, 'State:', smsState, 'Response:', JSON.stringify(smsData));
+
+      return res.json({
+        success: true,
+        smsSent: true,
+        message: 'SMS notification sent successfully',
+        smsState: smsState,
+        smsDetails: {
+          recipient: normalizedPhone,
+          state: smsState,
+          usage: smsData.usage || null
+        }
+      });
     } catch (smsErr) {
       const errData = smsErr.response?.data || {};
       const errStatus = smsErr.response?.status || 'unknown';
       console.error('❌ SMS send error:', { status: errStatus, data: errData, message: smsErr.message });
-      return res.status(500).json({ success: false, smsSent: false, message: `Failed to send SMS: ${errData.error || errData.message || smsErr.message || 'Unknown error'}`, smsApiStatus: errStatus, smsApiError: errData });
+      return res.status(500).json({
+        success: false,
+        smsSent: false,
+        message: `Failed to send SMS: ${errData.error || errData.message || smsErr.message || 'Unknown error'}`,
+        smsApiStatus: errStatus,
+        smsApiError: errData
+      });
     }
 
   } catch (error) {
