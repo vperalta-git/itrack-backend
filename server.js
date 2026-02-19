@@ -4156,17 +4156,21 @@ app.post('/api/send-notification', async (req, res) => {
 
     const smsMessage = getSmsMessage();
 
+    console.log('📤 SMS Request:', { url: smsApiUrl, recipient: normalizedPhone, messageLength: smsMessage.length, apiKeyPresent: !!smsApiKey, apiKeyFirst8: smsApiKey ? smsApiKey.substring(0, 8) : 'none' });
+
     try {
-      await axios.post(
+      const smsResponse = await axios.post(
         smsApiUrl,
         { recipient: normalizedPhone, message: smsMessage },
         { headers: { 'Content-Type': 'application/json', 'x-api-key': smsApiKey } }
       );
-      console.log('✅ SMS sent successfully to:', normalizedPhone);
+      console.log('✅ SMS sent successfully to:', normalizedPhone, 'Response:', JSON.stringify(smsResponse.data));
       return res.json({ success: true, smsSent: true, message: 'SMS notification sent successfully' });
     } catch (smsErr) {
-      console.error('❌ SMS send error:', smsErr.message || smsErr);
-      return res.status(500).json({ success: false, smsSent: false, message: `Failed to send SMS: ${smsErr.message || 'Unknown error'}` });
+      const errData = smsErr.response?.data || {};
+      const errStatus = smsErr.response?.status || 'unknown';
+      console.error('❌ SMS send error:', { status: errStatus, data: errData, message: smsErr.message });
+      return res.status(500).json({ success: false, smsSent: false, message: `Failed to send SMS: ${errData.error || errData.message || smsErr.message || 'Unknown error'}`, smsApiStatus: errStatus, smsApiError: errData });
     }
 
   } catch (error) {
