@@ -4038,7 +4038,7 @@ app.post('/api/send-notification', async (req, res) => {
       return trimmed;
     };
 
-    const smsApiUrl = process.env.SMS_API_URL || 'https://sms-api-ph-gceo.onrender.com/send/sms';
+    const smsApiUrl = 'https://sms-api-ph-gceo.onrender.com/send/sms';
     const smsApiKey = process.env.SMS_API_KEY;
 
     if (!smsApiKey) {
