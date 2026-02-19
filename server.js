@@ -1594,8 +1594,11 @@ const UnitAllocation = mongoose.model('UnitAllocation', unitAllocationSchema);
 // Get all unit allocations (singular endpoint for mobile app compatibility)
 app.get('/api/getUnitAllocation', async (req, res) => {
   try {
-    const allocations = await UnitAllocation.find({}).sort({ createdAt: -1 });
-    console.log(`📊 Found ${allocations.length} unit allocations`);
+    // Exclude Released vehicles from allocations
+    const allocations = await UnitAllocation.find({ 
+      status: { $ne: 'Released' } 
+    }).sort({ createdAt: -1 });
+    console.log(`📊 Found ${allocations.length} active unit allocations (excluding Released)`);
     const normalized = allocations.map(a => {
       const obj = a.toObject();
       const assigned = obj.assignedTo || obj.assignedAgent || '';
@@ -1615,8 +1618,11 @@ app.get('/api/getUnitAllocation', async (req, res) => {
 // Get all unit allocations (plural endpoint for web app compatibility)
 app.get('/api/getUnitAllocations', async (req, res) => {
   try {
-    const allocations = await UnitAllocation.find({}).sort({ createdAt: -1 });
-    console.log(`📊 Found ${allocations.length} unit allocations`);
+    // Exclude Released vehicles from allocations
+    const allocations = await UnitAllocation.find({ 
+      status: { $ne: 'Released' } 
+    }).sort({ createdAt: -1 });
+    console.log(`📊 Found ${allocations.length} active unit allocations (excluding Released)`);
     const normalized = allocations.map(a => {
       const obj = a.toObject();
       const assigned = obj.assignedTo || obj.assignedAgent || '';
