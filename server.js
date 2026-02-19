@@ -3082,6 +3082,73 @@ app.get('/getCompletedRequests', async (req, res) => {
   }
 });
 
+// Get release history - all vehicles released to customers
+app.get('/api/release-history', async (req, res) => {
+  try {
+    console.log('📥 GET /api/release-history called');
+    
+    const releases = await Servicerequest.find({
+      $or: [
+        { releasedToCustomer: true },
+        { status: 'Released to Customer' },
+        { status: 'Released' }
+      ]
+    }).sort({ releasedAt: -1 }).lean();
+    
+    console.log(`📊 Found ${releases.length} released vehicles`);
+    res.json({ success: true, data: releases });
+  } catch (error) {
+    console.error('❌ Release history error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// Cleanup: mark inventory items as Released for already-released service requests
+app.post('/api/cleanup-released-inventory', async (req, res) => {
+  try {
+    console.log('🧹 Running released inventory cleanup...');
+    
+    // Find all released service requests
+    const releasedRequests = await Servicerequest.find({
+      $or: [
+        { releasedToCustomer: true },
+        { status: 'Released to Customer' }
+      ]
+    }).lean();
+    
+    console.log(`Found ${releasedRequests.length} released service requests`);
+    
+    let updatedCount = 0;
+    for (const req of releasedRequests) {
+      if (req.unitId) {
+        const result = await Inventory.findOneAndUpdate(
+          { 
+            $or: [{ unitId: req.unitId }, { conductionNumber: req.unitId }],
+            status: { $ne: 'Released' }
+          },
+          { status: 'Released', lastUpdatedBy: 'System Cleanup', dateUpdated: new Date() },
+          { new: true }
+        );
+        if (result) {
+          console.log(`  ✅ Updated inventory for ${req.unitName} (${req.unitId}) to Released`);
+          updatedCount++;
+        }
+      }
+    }
+    
+    console.log(`🧹 Cleanup complete: ${updatedCount} inventory items updated to Released`);
+    res.json({ 
+      success: true, 
+      message: `Cleanup complete: ${updatedCount} inventory items updated to Released`,
+      totalReleased: releasedRequests.length,
+      inventoryUpdated: updatedCount
+    });
+  } catch (error) {
+    console.error('❌ Cleanup error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // ========== DASHBOARD STATISTICS ==========
 
 // Dashboard stats endpoint with date filtering
@@ -3092,13 +3159,17 @@ app.get('/dashboard/stats', async (req, res) => {
     // Build date filter if dates are provided
     let dateFilter = {};
     if (startDate && endDate) {
+      // Set endDate to end of day (23:59:59.999) so today's data is included
+      const endOfDay = new Date(endDate);
+      endOfDay.setHours(23, 59, 59, 999);
+      
       dateFilter = {
         createdAt: {
           $gte: new Date(startDate),
-          $lte: new Date(endDate)
+          $lte: endOfDay
         }
       };
-      console.log(`📅 Filtering stats from ${startDate} to ${endDate}`);
+      console.log(`📅 Filtering stats from ${startDate} to ${endDate} (end of day: ${endOfDay.toISOString()})`);
     }
     
     // Count with date filters where applicable
@@ -3117,6 +3188,12 @@ app.get('/dashboard/stats', async (req, res) => {
     const inTransitVehicles = await DriverAllocation.countDocuments({ status: 'In Transit' });
     const readyForRelease = await DriverAllocation.countDocuments({ readyForRelease: true });
     
+    // Count actual released vehicles (service requests released to customer)
+    const releasedVehicles = await Servicerequest.countDocuments({
+      ...dateFilter,
+      releasedToCustomer: true
+    });
+    
     // Available stocks is current state, not date-filtered
     const availableStocks = await Inventory.countDocuments({ status: 'Available' });
     
@@ -3125,6 +3202,7 @@ app.get('/dashboard/stats', async (req, res) => {
       totalUsers,
       totalAllocations,
       completedAllocations,
+      releasedVehicles,
       finishedVehiclePreps: completedRequests,
       ongoingVehiclePreps: pendingRequests,
       ongoingShipments: inTransitVehicles,
