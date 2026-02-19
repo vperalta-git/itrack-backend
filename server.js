@@ -4117,10 +4117,9 @@ app.post('/api/send-notification', async (req, res) => {
       return trimmed;
     };
 
-    // SMS-API-PH configuration (single provider — no ITEXMO, no fallbacks)
-    const smsApiUrl = process.env.SMS_API_URL || 'https://sms-api-ph-gceo.onrender.com/send';
+    // SMS-API-PH configuration (single provider)
+    const smsApiUrl = process.env.SMS_API_URL || 'https://sms-api-ph-gceo.onrender.com/send/sms';
     const smsApiKey = process.env.SMS_API_KEY;
-    const smsSenderId = process.env.SMS_SENDER_ID || 'I-Track_Pasig';
 
     if (!smsApiKey) {
       console.warn('⚠️  SMS_API_KEY not set — skipping SMS send');
@@ -4171,7 +4170,6 @@ app.post('/api/send-notification', async (req, res) => {
 
     console.log('📤 SMS Request:', {
       url: smsApiUrl,
-      senderId: smsSenderId,
       recipient: normalizedPhone,
       messageLength: smsMessage.length,
       apiKeyPresent: !!smsApiKey,
@@ -4181,7 +4179,7 @@ app.post('/api/send-notification', async (req, res) => {
     try {
       const smsResponse = await axios.post(
         smsApiUrl,
-        { senderId: smsSenderId, recipient: normalizedPhone, message: smsMessage },
+        { recipient: normalizedPhone, message: smsMessage },
         {
           headers: { 'Content-Type': 'application/json', 'x-api-key': smsApiKey },
           timeout: 30000
