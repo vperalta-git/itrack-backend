@@ -3521,7 +3521,7 @@ const testDriveVehicleSchema = new mongoose.Schema({
   mileage: { type: Number, default: 0 },
   fuelLevel: { type: String, default: 'Full' },
   location: { type: String, default: 'Isuzu Stockyard' },
-  addedBy: { type: String, required: true },
+  addedBy: { type: String, required: true, default: 'System' },
   notes: String,
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now }
@@ -3557,6 +3557,10 @@ app.post('/api/testdrive-vehicles', async (req, res) => {
   try {
     const vehicleData = req.body;
     console.log('📋 Adding test drive vehicle:', vehicleData);
+
+    if (!vehicleData.addedBy) {
+      vehicleData.addedBy = 'System';
+    }
     
     // Check if unitId already exists
     const existingVehicle = await TestDriveVehicle.findOne({ unitId: vehicleData.unitId });
@@ -4828,8 +4832,11 @@ const TestDriveSchema = new mongoose.Schema({
   customerName: String,
   customerPhone: String,
   customerEmail: String,
+  vehicleId: String,
   unitId: String,
   unitName: String,
+  variation: String,
+  bodyColor: String,
   scheduledDate: Date,
   scheduledTime: String,
   status: { type: String, default: 'Scheduled' },
